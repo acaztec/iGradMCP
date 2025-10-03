@@ -1,0 +1,22 @@
+{
+  "name": "aztec-iet-assistant",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "cd apps/web && npm run dev",
+    "dev:mcp": "cd packages/mcp-server && npm run dev",
+    "build": "cd apps/web && npm run build",
+    "build:mcp": "cd packages/mcp-server && npm run build",
+    "test:mcp": "cd packages/mcp-server && npm test",
+    "lint": "echo 'Linting not configured'",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\""
+  },
+  "devDependencies": {
+    "prettier": "^3.2.5",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
+  }
+}
