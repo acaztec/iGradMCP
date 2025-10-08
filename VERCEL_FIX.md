@@ -1,106 +1,105 @@
-# Vercel Deployment Fix - Root Directory Solution
+# Vercel Deployment Fix - Output Directory Solution
 
-## Problem
+## Problem History
 
-The deployment failed with:
-```
-Error: No Next.js version detected. Make sure your package.json has "next" in either "dependencies" or "devDependencies".
-```
+Initial deployment failures:
+1. First: `Error: No Next.js version detected`
+2. Then: `Error: No Output Directory named "public" found`
 
 ## Root Cause
 
 This is a **monorepo structure** issue:
-- Root directory: `/` contains only workspace configuration
-- Next.js app: `/apps/web` contains the actual Next.js application
-- Vercel by default looks in root `/` for Next.js dependencies
+- Root directory: `/` runs the build script from `package.json`
+- Build script executes in: `/apps/web`
+- Output is created in: `/apps/web/.next`
+- Vercel by default looks for output in `/public` or root
 
-## Solution: Set Root Directory to `apps/web`
+## Solution: Use vercel.json Configuration
 
-The correct way to deploy a monorepo with Vercel is to configure the **Root Directory** setting.
+The project includes a `vercel.json` file that solves this:
 
-### Step-by-Step Fix
-
-1. **In Vercel Dashboard** when importing the repository:
-   - Click on "Edit" next to **Root Directory**
-   - Set it to: `apps/web`
-   - Framework Preset will auto-detect as Next.js
-   - Leave all other settings as default
-
-2. **What this does**:
-   - Vercel treats `apps/web` as the project root
-   - Finds `package.json` with Next.js dependencies
-   - Runs `npm install` and `next build` from that directory
-   - Everything works as expected
-
-### Important Notes
-
-- ❌ Do NOT use custom `vercel.json` for this - it causes conflicts
-- ✅ DO set Root Directory to `apps/web` in the dashboard
-- ✅ Let Vercel auto-detect Next.js framework
-- ✅ Use default build commands
-
-### Environment Variables
-
-After setting Root Directory, add these environment variables:
-
-```
-OPENAI_API_KEY=your_openai_key_here
-MCP_URL=http://localhost:3001/mcp
-MCP_API_KEY=your_secure_key_here
-NEXT_PUBLIC_SUPABASE_URL=https://nrlwfowagmrefkloncjv.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5ybHdmb3dhZ21yZWZrbG9uY2p2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk1MTg2MzAsImV4cCI6MjA3NTA5NDYzMH0.eO2DEhcyQALSqFgF-y8uUmN6kV2JrBlVBxg65DJmpN8
+```json
+{
+  "buildCommand": "cd apps/web && npm install && npm run build",
+  "outputDirectory": "apps/web/.next",
+  "installCommand": "npm install"
+}
 ```
 
-## Visual Guide
+### What This Does
 
-When importing from GitHub:
+1. **installCommand**: Installs root dependencies (minimal)
+2. **buildCommand**:
+   - Changes to `apps/web` directory
+   - Installs Next.js dependencies there
+   - Builds the Next.js application
+3. **outputDirectory**: Tells Vercel the build output is in `apps/web/.next`
+
+### Deployment Steps
+
+1. **Push to GitHub:**
+   ```bash
+   git remote add origin https://github.com/acaztec/iGradMCP.git
+   git branch -M main
+   git push -u origin main
+   ```
+
+2. **Import to Vercel:**
+   - Go to [vercel.com/new](https://vercel.com/new)
+   - Import your repository
+   - **Leave all build settings as default** - Vercel will use `vercel.json`
+   - Add environment variables (see below)
+   - Click Deploy
+
+3. **Environment Variables:**
+   ```
+   OPENAI_API_KEY=your_openai_key
+   MCP_URL=http://localhost:3001/mcp
+   MCP_API_KEY=your_secure_key
+   NEXT_PUBLIC_SUPABASE_URL=https://nrlwfowagmrefkloncjv.supabase.co
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5ybHdmb3dhZ21yZWZrbG9uY2p2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk1MTg2MzAsImV4cCI6MjA3NTA5NDYzMH0.eO2DEhcyQALSqFgF-y8uUmN6kV2JrBlVBxg65DJmpN8
+   ```
+
+### Expected Build Output
 
 ```
-┌─────────────────────────────────────────────┐
-│ Configure Project                            │
-│                                              │
-│ Framework Preset: Next.js                   │
-│ Root Directory: apps/web  ← SET THIS!       │
-│ Build Command: (default)                    │
-│ Output Directory: (default)                 │
-│ Install Command: (default)                  │
-└─────────────────────────────────────────────┘
+✓ Compiled successfully
+✓ Generating static pages (5/5)
+Route (app)                              Size     First Load JS
+┌ ○ /                                    55.1 kB         142 kB
+├ ○ /_not-found                          873 B          88.2 kB
+└ ƒ /api/chat                            0 B                0 B
 ```
 
-## Verification
+## Key Points
 
-After deployment with Root Directory set to `apps/web`:
+✅ The `vercel.json` file is **required** for this monorepo structure
+✅ Don't modify build settings in Vercel dashboard - it uses `vercel.json`
+✅ Don't set Root Directory in dashboard - it should be `/` (root)
+✅ The configuration handles everything automatically
 
-1. ✅ Build log shows: `Detected Next.js version X.X.X`
-2. ✅ Install runs in `apps/web` directory
-3. ✅ Build completes successfully
-4. ✅ App deploys without errors
+## Alternative Approach (Not Recommended)
 
-## Common Mistakes
+You could move all Next.js files from `apps/web/` to root `/`, but this:
+- Loses the monorepo structure
+- Makes it harder to deploy the MCP server separately
+- Mixing concerns in one directory
 
-❌ Leaving Root Directory as `/` (root)
-❌ Using custom `vercel.json` with complex build commands
-❌ Trying to install dependencies at root level
+## Troubleshooting
 
-✅ Set Root Directory to `apps/web`
-✅ Let Vercel auto-detect and use defaults
-✅ Add environment variables only
+**If build still fails:**
 
-## For Existing Projects
+1. Check that `vercel.json` exists in repository root
+2. Verify environment variables are set correctly
+3. Check build logs for specific error messages
+4. Ensure the commit with `vercel.json` is pushed to GitHub
 
-If you already created the project:
+**To verify locally:**
+```bash
+npm run build
+# Should complete successfully
+```
 
-1. Go to Project Settings
-2. Navigate to **General**
-3. Find **Root Directory** setting
-4. Click Edit and change to `apps/web`
-5. Save and trigger a new deployment
+## After Deployment
 
-## Alternative: Reorganize Project
-
-If you prefer not to use Root Directory setting, you could:
-1. Move everything from `apps/web/*` to root `/`
-2. This makes it a standard Next.js project
-3. But you lose the monorepo structure for the MCP server
-
-**Recommended**: Keep monorepo structure and use Root Directory setting.
+Update `MCP_URL` environment variable once you deploy the MCP server (see `DEPLOYMENT.md` for MCP server deployment instructions).

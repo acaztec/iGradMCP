@@ -1,13 +1,8 @@
 # Quick Start - Deploy to Vercel
 
-## The One Thing You Must Do
+## Simple 3-Step Deployment
 
-⚠️ **Set Root Directory to `apps/web` in Vercel** ⚠️
-
-This is a monorepo project. If you don't set the Root Directory, deployment will fail with:
-```
-Error: No Next.js version detected
-```
+The project includes a `vercel.json` that configures everything automatically.
 
 ## Steps to Deploy
 
@@ -23,36 +18,9 @@ git push -u origin main
 
 1. Go to https://vercel.com/new
 2. Select your repository: `acaztec/iGradMCP`
-3. You'll see the configuration screen
+3. **Leave all build settings as default** (Vercel will use `vercel.json`)
 
-### 3. Set Root Directory (CRITICAL!)
-
-```
-┌──────────────────────────────────────────────┐
-│ Configure Project                             │
-├──────────────────────────────────────────────┤
-│                                               │
-│ Framework Preset: Next.js                    │
-│                                               │
-│ Root Directory: ./  [Edit] ← CLICK HERE!     │
-│                     ↓                         │
-│                   Change to: apps/web         │
-│                                               │
-│ Build Command: (leave default)               │
-│ Output Directory: (leave default)            │
-│ Install Command: (leave default)             │
-│                                               │
-└──────────────────────────────────────────────┘
-```
-
-**What to do:**
-1. Click the **[Edit]** button next to "Root Directory"
-2. Type: `apps/web`
-3. Click Save
-
-### 4. Add Environment Variables
-
-Click on "Environment Variables" and add:
+### 3. Add Environment Variables
 
 ```
 OPENAI_API_KEY = your_openai_api_key_here
@@ -62,34 +30,23 @@ NEXT_PUBLIC_SUPABASE_URL = https://nrlwfowagmrefkloncjv.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5ybHdmb3dhZ21yZWZrbG9uY2p2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk1MTg2MzAsImV4cCI6MjA3NTA5NDYzMH0.eO2DEhcyQALSqFgF-y8uUmN6kV2JrBlVBxg65DJmpN8
 ```
 
-### 5. Deploy
+Then click **Deploy**!
 
-Click **Deploy** button!
+## How It Works
+
+The included `vercel.json` tells Vercel:
+- Where to run the build (`apps/web`)
+- Where to find the output (`apps/web/.next`)
+- What commands to use
+
+You don't need to configure anything manually - it just works!
 
 ## Expected Result
 
 ✅ Build log shows: `Detected Next.js 14.x.x`
 ✅ Dependencies install successfully
-✅ Build completes without errors
+✅ Build completes: `✓ Compiled successfully`
 ✅ App deploys successfully
-
-## If It Still Fails
-
-Double-check that Root Directory is set to `apps/web`:
-1. Go to your project settings in Vercel
-2. Navigate to **General**
-3. Look for **Root Directory**
-4. It should show: `apps/web`
-5. If not, edit and change it
-
-Then trigger a new deployment.
-
-## Need More Help?
-
-See detailed documentation:
-- `DEPLOYMENT.md` - Complete deployment guide
-- `VERCEL_FIX.md` - Troubleshooting Vercel issues
-- `README.md` - Full project documentation
 
 ## After Web App Deploys
 
@@ -97,3 +54,23 @@ You'll also need to deploy the MCP server separately:
 - Use Railway, Render, or Fly.io
 - See `DEPLOYMENT.md` for MCP server deployment instructions
 - Update `MCP_URL` environment variable in Vercel with your deployed MCP server URL
+
+## Need More Help?
+
+See detailed documentation:
+- `DEPLOYMENT.md` - Complete deployment guide
+- `VERCEL_FIX.md` - How the monorepo configuration works
+- `README.md` - Full project documentation
+
+## Troubleshooting
+
+**Build fails?**
+1. Check that `vercel.json` is in your repository root
+2. Verify all environment variables are set
+3. Look at build logs for specific errors
+
+**Want to test locally first?**
+```bash
+npm run build
+```
+This should complete successfully.
