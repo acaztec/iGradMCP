@@ -40,12 +40,14 @@ Error: No Output Directory named "public" found after the Build completed.
 ```
 
 **Cause:**
-- When Root Directory is NOT set, Vercel runs build from root
-- Build outputs to `apps/web/.next` but Vercel looks in root
-- Mismatched expectations
+- Even with Root Directory set, Vercel didn't recognize this as a Next.js project
+- Vercel looked for `public` directory instead of `.next`
+- Framework auto-detection failed
 
 **Fix:**
 - ✅ Set Root Directory to `apps/web` in Vercel Dashboard
+- ✅ Added `vercel.json` in `apps/web/` directory with `"framework": "nextjs"`
+- ✅ Added `.npmrc` to `.gitignore` to prevent localhost registry from being committed
 
 ## Complete Deployment Instructions
 
@@ -132,21 +134,23 @@ Repository Root (/)
 │   └── web/                    ← Root Directory points HERE
 │       ├── package.json        ← Has "next" dependency
 │       ├── next.config.js      ← Next.js config
+│       ├── vercel.json         ← Specifies framework: "nextjs"
 │       ├── src/                ← Application code
 │       └── .next/              ← Build output (created by Next.js)
 ├── packages/
 │   └── mcp-server/
 ├── package.json                ← Root package (minimal, for tooling only)
+├── .gitignore                  ← Ignores .npmrc
 └── [NO turbo.json]             ← Removed
 └── [NO pnpm-workspace.yaml]    ← Removed
-└── [NO .npmrc]                 ← Removed
+└── [NO .npmrc]                 ← Removed and ignored
 ```
 
 ### Vercel's Behavior with Root Directory = `apps/web`
 
 1. **Treats `apps/web` as project root**
-2. **Finds `package.json` with Next.js**
-3. **Auto-detects Framework as Next.js**
+2. **Reads `vercel.json` and sees `"framework": "nextjs"`**
+3. **Recognizes this as a Next.js project**
 4. **Runs `npm install` in `apps/web`**
 5. **Runs `next build` in `apps/web`**
 6. **Finds output in `.next/` subdirectory**
