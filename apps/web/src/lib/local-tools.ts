@@ -1,10 +1,12 @@
+import { jsonSchema, type Schema } from "ai";
+
 import { Pillar, getCatalog, lessonsByCourse, searchLessons } from "./catalog";
 
-type ToolHandler = (args: Record<string, any>) => Promise<any> | any;
+type ToolHandler = (args: Record<string, unknown>) => Promise<any> | any;
 
 type ToolDefinition = {
   description: string;
-  parameters: Record<string, any>;
+  parameters: Schema<Record<string, unknown>>;
   execute: ToolHandler;
 };
 
@@ -26,19 +28,21 @@ const sharedTools: Record<string, ToolDefinition> = {
   search_lessons: {
     description:
       "Search for lessons by query text, optionally filtered by pillar or course code. Returns matching lessons with their codes, course, subject, unit, and descriptions.",
-    parameters: {
+    parameters: jsonSchema({
       type: "object",
+      additionalProperties: false,
       properties: {
         query: { type: "string", description: "Search query text" },
         pillar: {
           type: "string",
           enum: ["academic", "soft", "cte"],
-          description: "Filter by pillar: academic (Bridge Pre-HSE), soft (Ready for Work), or cte (CBCS)",
+          description:
+            "Filter by pillar: academic (Bridge Pre-HSE), soft (Ready for Work), or cte (CBCS)",
         },
         ccCode: { type: "string", description: "Filter by specific course code" },
       },
       required: ["query"],
-    },
+    }),
     execute: (args) => {
       const query = requireString(args.query, "query");
       const pillar = args.pillar as Pillar | undefined;
@@ -72,13 +76,14 @@ const sharedTools: Record<string, ToolDefinition> = {
   get_sequence: {
     description:
       "Get the ordered sequence of units and lessons for a course. For Academic pillar courses, returns prerequisites order.",
-    parameters: {
+    parameters: jsonSchema({
       type: "object",
+      additionalProperties: false,
       properties: {
         course: { type: "string", description: "Course name" },
       },
       required: ["course"],
-    },
+    }),
     execute: (args) => {
       const course = requireString(args.course, "course");
       const lessons = lessonsByCourse(course);
@@ -139,14 +144,16 @@ const sharedTools: Record<string, ToolDefinition> = {
   apply_locator_results: {
     description:
       "Given student locator results (reading, math, language scores), recommend starting course, entry unit, and lessons that can be excused.",
-    parameters: {
+    parameters: jsonSchema({
       type: "object",
+      additionalProperties: false,
       properties: {
         studentId: { type: "string", description: "Student identifier" },
         payload: {
           type: "object",
           description: "Locator assessment scores",
           required: ["reading", "math"],
+          additionalProperties: false,
           properties: {
             reading: { type: "number", minimum: 0, maximum: 12 },
             math: { type: "number", minimum: 0, maximum: 12 },
@@ -155,7 +162,7 @@ const sharedTools: Record<string, ToolDefinition> = {
         },
       },
       required: ["payload"],
-    },
+    }),
     execute: (args) => {
       const payload = args.payload as
         | { reading: number; math: number; language?: number }
@@ -204,19 +211,26 @@ const sharedTools: Record<string, ToolDefinition> = {
   generate_contextualized_soft_skill: {
     description:
       "Generate an industry-specific soft skills scenario with coaching points, practice prompts, and rubrics.",
-    parameters: {
+    parameters: jsonSchema({
       type: "object",
+      additionalProperties: false,
       required: ["industry", "topic", "scenarioLevel"],
       properties: {
-        industry: { type: "string", description: "Target industry (e.g., healthcare, hospitality, construction)" },
-        topic: { type: "string", description: "Soft skill topic (e.g., conflict resolution, teamwork)" },
+        industry: {
+          type: "string",
+          description: "Target industry (e.g., healthcare, hospitality, construction)",
+        },
+        topic: {
+          type: "string",
+          description: "Soft skill topic (e.g., conflict resolution, teamwork)",
+        },
         scenarioLevel: {
           type: "string",
           enum: ["beginner", "intermediate", "advanced"],
           description: "Difficulty level",
         },
       },
-    },
+    }),
     execute: (args) => {
       const industry = requireString(args.industry, "industry");
       const topic = requireString(args.topic, "topic");
@@ -277,15 +291,24 @@ const sharedTools: Record<string, ToolDefinition> = {
   generate_contextualized_academic: {
     description:
       "Generate industry-contextualized academic content (reading passages or math problems) tied to specific skills, with answer keys and lesson code mappings.",
-    parameters: {
+    parameters: jsonSchema({
       type: "object",
+      additionalProperties: false,
       required: ["industry", "targetSkill", "difficulty"],
       properties: {
         industry: { type: "string", description: "Target industry context" },
-        targetSkill: { type: "string", description: "Academic skill (e.g., main_idea, inference, addition, fractions)" },
-        difficulty: { type: "number", minimum: 1, maximum: 3, description: "Difficulty level (1=easy, 3=hard)" },
+        targetSkill: {
+          type: "string",
+          description: "Academic skill (e.g., main_idea, inference, addition, fractions)",
+        },
+        difficulty: {
+          type: "number",
+          minimum: 1,
+          maximum: 3,
+          description: "Difficulty level (1=easy, 3=hard)",
+        },
       },
-    },
+    }),
     execute: (args) => {
       const industry = requireString(args.industry, "industry");
       const targetSkill = requireString(args.targetSkill, "targetSkill");
@@ -333,19 +356,26 @@ const sharedTools: Record<string, ToolDefinition> = {
   remediation_plan_from_cert_gaps: {
     description:
       "Given certification exam results with domain scores, recommend lessons for remediation based on weak domains.",
-    parameters: {
+    parameters: jsonSchema({
       type: "object",
+      additionalProperties: false,
       required: ["exam", "domainScores"],
       properties: {
-        exam: { type: "string", description: "Certification exam name (e.g., PTCB, CBCS)" },
+        exam: {
+          type: "string",
+          description: "Certification exam name (e.g., PTCB, CBCS)",
+        },
         domainScores: {
           type: "object",
           additionalProperties: { type: "number" },
           description: "Domain names with scores (0-100)",
         },
-        minReadingLevel: { type: "string", description: "Minimum reading level required" },
+        minReadingLevel: {
+          type: "string",
+          description: "Minimum reading level required",
+        },
       },
-    },
+    }),
     execute: (args) => {
       const exam = requireString(args.exam, "exam");
       const domainScores = args.domainScores as Record<string, number>;
@@ -396,13 +426,17 @@ const sharedTools: Record<string, ToolDefinition> = {
   },
   program_requirements: {
     description: "Get certification program requirements including hours, competencies, and reference links.",
-    parameters: {
+    parameters: jsonSchema({
       type: "object",
+      additionalProperties: false,
       required: ["exam"],
       properties: {
-        exam: { type: "string", description: "Certification exam or program name" },
+        exam: {
+          type: "string",
+          description: "Certification exam or program name",
+        },
       },
-    },
+    }),
     execute: (args) => {
       const exam = requireString(args.exam, "exam");
       const { lessons } = getCatalog();

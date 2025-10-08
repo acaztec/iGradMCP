@@ -1,4 +1,4 @@
-import { streamText } from "ai";
+import { jsonSchema, streamText } from "ai";
 import { openai } from "@ai-sdk/openai";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
@@ -49,9 +49,12 @@ async function getMCPTools(): Promise<Record<string, any>> {
     const tools: Record<string, any> = {};
 
     for (const tool of toolsResult.tools) {
+      const schema =
+        tool.inputSchema !== undefined ? jsonSchema(tool.inputSchema) : undefined;
+
       tools[tool.name] = {
         description: tool.description,
-        parameters: tool.inputSchema,
+        ...(schema ? { parameters: schema } : {}),
         execute: async (args: any) => {
           const result = await client.callTool({
             name: tool.name,
