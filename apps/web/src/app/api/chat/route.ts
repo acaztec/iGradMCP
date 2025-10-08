@@ -3,6 +3,7 @@ import { openai } from "@ai-sdk/openai";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { saveMessage, updateConversationTitle } from "@/lib/db";
+import { getLocalTools } from "@/lib/local-tools";
 
 const MCP_URL = process.env.MCP_URL || "http://localhost:3001/mcp";
 const MCP_API_KEY = process.env.MCP_API_KEY || "dev-secret-key";
@@ -81,19 +82,33 @@ function isModelNotFoundError(error: unknown): boolean {
   return errorWithData?.data?.error?.code === "model_not_found";
 }
 
-function generateSystemPrompt(pillar: string, industry: string): string {
-  const pillarContext = {
+function generateSystemPrompt(
+  pillar: string,
+  industry: string,
+  toolSource: "mcp" | "local"
+): string {
+  const pillarContextMap = {
     academic:
       "Bridge Pre-HSE (Academic) - Focus on foundational reading, math, and language skills for adult learners preparing for high school equivalency exams.",
     soft: "Ready for Work (Soft Skills) - Emphasize workplace readiness, professional communication, teamwork, and industry-specific soft skills.",
     cte: "CBCS/CTE (Career Technical Education) - Concentrate on certification preparation, technical competencies, and career-specific training.",
-  }[pillar];
+  } as const;
+
+  const pillarContext =
+    pillarContextMap[pillar as keyof typeof pillarContextMap] ??
+    pillarContextMap.academic;
+
+  const toolExpectation =
+    toolSource === "mcp"
+      ? "Use the MCP tools to ground every recommendation in verified catalog data."
+      : "You are running in catalog fallback mode. The only available knowledge comes from the embedded Aztec catalog tools—call `search_lessons` (and any other relevant tool) before you answer so every recommendation is backed by real lesson codes. If the tools do not return supporting lessons, clearly tell the user you could not find a match instead of guessing.";
 
   return `You are the Aztec IET Assistant, helping staff create and retrieve educational content from Aztec's curriculum catalog.
 
 CURRENT CONTEXT:
 - Pillar: ${pillar} (${pillarContext})
 - Target Industry: ${industry}
+- Tool mode: ${toolSource === "mcp" ? "Model Context Protocol (remote server)" : "Local catalog fallback"}
 
 INSTRUCTIONS:
 1. All recommendations and content must be grounded in Aztec lesson codes from the catalog
@@ -102,6 +117,7 @@ INSTRUCTIONS:
 4. Keep responses concise and actionable
 5. For ${industry} contexts, use industry-appropriate terminology and realistic scenarios
 6. When students need placement or remediation, use the catalog to recommend specific entry points
+7. ${toolExpectation}
 
 AVAILABLE TOOLS:
 - search_lessons: Find lessons by topic, pillar, or code
@@ -128,13 +144,22 @@ export async function POST(req: Request) {
     }
 
     const mcpTools = await getMCPTools();
+    const hasMcpTools = Object.keys(mcpTools).length > 0;
+    const toolSource: "mcp" | "local" = hasMcpTools ? "mcp" : "local";
+    const tools = hasMcpTools ? mcpTools : getLocalTools();
+
+    if (!hasMcpTools) {
+      console.warn(
+        "Falling back to embedded catalog tools because MCP server is unavailable."
+      );
+    }
 
     const createStream = async (modelName: string) =>
       streamText({
         model: openai(modelName),
-        system: generateSystemPrompt(pillar, industry),
+        system: generateSystemPrompt(pillar, industry, toolSource),
         messages,
-        tools: mcpTools,
+        tools,
         maxSteps: 5,
         onFinish: async ({ text }) => {
           if (conversationId) {

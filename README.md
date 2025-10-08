@@ -96,6 +96,10 @@ pnpm dev
 
 The web app will start on `http://localhost:3000`.
 
+#### What happens if the MCP server is offline?
+
+The chat API now loads a lightweight copy of the Aztec catalog directly from the Excel file when the MCP server cannot be reached. In this fallback mode the assistant still calls the same tool interfaces (`search_lessons`, `program_requirements`, etc.), but everything runs in-process to guarantee that responses stay grounded in real lesson codes instead of hallucinated data. You will see a server log warning when this kicks in. For the richest experience—including resource browsing and centralized tool analytics—keep the MCP server running, but you can continue development safely without it.
+
 ### Test MCP Tools
 
 Run the test script to verify all MCP tools work correctly:
