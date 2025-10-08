@@ -36,27 +36,42 @@ async function getMCPTools(): Promise<Record<string, any>> {
     }
   );
 
-  await client.connect(transport);
+  let connected = false;
 
-  const toolsResult = await client.listTools();
-  const tools: Record<string, any> = {};
+  try {
+    await client.connect(transport);
+    connected = true;
 
-  for (const tool of toolsResult.tools) {
-    tools[tool.name] = {
-      description: tool.description,
-      parameters: tool.inputSchema,
-      execute: async (args: any) => {
-        const result = await client.callTool({
-          name: tool.name,
-          arguments: args,
-        });
-        return result;
-      },
-    };
+    const toolsResult = await client.listTools();
+    const tools: Record<string, any> = {};
+
+    for (const tool of toolsResult.tools) {
+      tools[tool.name] = {
+        description: tool.description,
+        parameters: tool.inputSchema,
+        execute: async (args: any) => {
+          const result = await client.callTool({
+            name: tool.name,
+            arguments: args,
+          });
+          return result;
+        },
+      };
+    }
+
+    return tools;
+  } catch (error) {
+    console.error("Failed to load MCP tools:", error);
+    return {};
+  } finally {
+    if (connected) {
+      try {
+        await client.close();
+      } catch (closeError) {
+        console.error("Failed to close MCP client:", closeError);
+      }
+    }
   }
-
-  await client.close();
-  return tools;
 }
 
 function generateSystemPrompt(pillar: string, industry: string): string {
