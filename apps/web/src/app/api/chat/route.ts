@@ -189,7 +189,11 @@ export async function POST(req: Request) {
         messages,
         onFinish: async ({ text }) => {
           if (conversationId) {
-            const userContent = latestUserText || messages[messages.length - 1]?.content || "";
+            const lastMessage = messages[messages.length - 1];
+            const fallbackUserContent = lastMessage
+              ? normalizeContent(lastMessage.content)
+              : "";
+            const userContent = latestUserText || fallbackUserContent;
             await saveMessage(conversationId, "user", userContent);
             await saveMessage(conversationId, "assistant", text);
 
