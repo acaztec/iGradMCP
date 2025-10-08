@@ -5,8 +5,8 @@
   "scripts": {
     "dev": "cd apps/web && npm run dev",
     "dev:mcp": "cd packages/mcp-server && npm run dev",
-    "build": "cd apps/web && npm run build",
-    "build:mcp": "cd packages/mcp-server && npm run build",
+    "build": "cd apps/web && npm install && npm run build",
+    "build:mcp": "cd packages/mcp-server && npm install && npm run build",
     "test:mcp": "cd packages/mcp-server && npm test",
     "lint": "echo 'Linting not configured'",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\""
