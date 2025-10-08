@@ -147,6 +147,8 @@ This will:
 
 ### Deploy to Vercel
 
+⚠️ **IMPORTANT**: This is a monorepo. You MUST set Root Directory to `apps/web` in Vercel.
+
 1. **Push to GitHub:**
    ```bash
    git add .
@@ -157,7 +159,9 @@ This will:
 2. **Connect to Vercel:**
    - Go to [vercel.com](https://vercel.com)
    - Import your GitHub repository
-   - Vercel will auto-detect the Next.js app in `apps/web`
+   - **CRITICAL**: Click "Edit" next to Root Directory and set it to `apps/web`
+   - Framework will auto-detect as Next.js
+   - Leave all other build settings as default
 
 3. **Configure Environment Variables in Vercel:**
    - Add `OPENAI_API_KEY` with your OpenAI key

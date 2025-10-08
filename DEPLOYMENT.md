@@ -17,10 +17,12 @@ git push -u origin main
 
 1. Go to [vercel.com/new](https://vercel.com/new)
 2. Import your GitHub repository: `acaztec/iGradMCP`
-3. Configure the project:
-   - **Framework Preset**: Next.js
-   - **Root Directory**: Leave as default (/)
-   - **Build Command**: Will use the one from `vercel.json`
+3. **IMPORTANT**: Configure the project:
+   - **Framework Preset**: Next.js (should auto-detect)
+   - **Root Directory**: Click "Edit" and set to `apps/web` ⚠️ **CRITICAL STEP**
+   - **Build Command**: Leave as default
+   - **Output Directory**: Leave as default
+   - **Install Command**: Leave as default
 4. Add environment variables:
    ```
    OPENAI_API_KEY=your_openai_key_here
