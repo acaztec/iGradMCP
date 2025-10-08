@@ -83,8 +83,7 @@ git push origin main
    Under **Environment Variables** section, add:
    ```
    OPENAI_API_KEY = your_openai_api_key
-   MCP_URL = http://localhost:3001/mcp
-   MCP_API_KEY = your_secure_key
+   OPENAI_MODEL = gpt-4o-mini
    NEXT_PUBLIC_SUPABASE_URL = https://nrlwfowagmrefkloncjv.supabase.co
    NEXT_PUBLIC_SUPABASE_ANON_KEY = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5ybHdmb3dhZ21yZWZrbG9uY2p2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk1MTg2MzAsImV4cCI6MjA3NTA5NDYzMH0.eO2DEhcyQALSqFgF-y8uUmN6kV2JrBlVBxg65DJmpN8
    ```
@@ -198,11 +197,9 @@ Local development continues to work the same:
 # From repository root
 npm run dev        # Runs Next.js dev server
 npm run build      # Builds Next.js app
-npm run dev:mcp    # Runs MCP server
-npm run build:mcp  # Builds MCP server
 ```
 
-The root `package.json` scripts still work because they explicitly `cd` into subdirectories.
+The root `package.json` scripts still work because they explicitly `cd` into the web app directory.
 
 ## Summary
 

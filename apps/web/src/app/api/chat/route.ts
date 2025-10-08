@@ -1,94 +1,117 @@
-import { jsonSchema, streamText } from "ai";
+import { streamText, type CoreMessage } from "ai";
 import { openai } from "@ai-sdk/openai";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { saveMessage, updateConversationTitle } from "@/lib/db";
-import { getLocalTools } from "@/lib/local-tools";
+import {
+  type Pillar,
+  type LessonRecord,
+  searchLessons,
+} from "@/lib/catalog";
 
-const MCP_URL = process.env.MCP_URL || "http://localhost:3001/mcp";
-const MCP_API_KEY = process.env.MCP_API_KEY || "dev-secret-key";
+export const runtime = "nodejs";
+
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const DEFAULT_OPENAI_MODEL = "gpt-4o-mini";
 const OPENAI_MODEL = process.env.OPENAI_MODEL || DEFAULT_OPENAI_MODEL;
-
-interface MCPTool {
-  name: string;
-  description: string;
-  inputSchema: any;
-}
-
-async function getMCPTools(): Promise<Record<string, any>> {
-  const client = new Client(
-    {
-      name: "aztec-web-client",
-      version: "1.0.0",
-    },
-    {
-      capabilities: {},
-    }
-  );
-
-  const transport = new StreamableHTTPClientTransport(
-    new URL(MCP_URL),
-    {
-      requestInit: {
-        headers: {
-          Authorization: `Bearer ${MCP_API_KEY}`,
-        },
-      },
-    }
-  );
-
-  let connected = false;
-
-  try {
-    await client.connect(transport);
-    connected = true;
-
-    const toolsResult = await client.listTools();
-    const tools: Record<string, any> = {};
-
-    for (const tool of toolsResult.tools) {
-      const schema =
-        tool.inputSchema !== undefined ? jsonSchema(tool.inputSchema) : undefined;
-
-      tools[tool.name] = {
-        description: tool.description,
-        ...(schema ? { parameters: schema } : {}),
-        execute: async (args: any) => {
-          const result = await client.callTool({
-            name: tool.name,
-            arguments: args,
-          });
-          return result;
-        },
-      };
-    }
-
-    return tools;
-  } catch (error) {
-    console.error("Failed to load MCP tools:", error);
-    return {};
-  } finally {
-    if (connected) {
-      try {
-        await client.close();
-      } catch (closeError) {
-        console.error("Failed to close MCP client:", closeError);
-      }
-    }
-  }
-}
 
 function isModelNotFoundError(error: unknown): boolean {
   const errorWithData = error as { data?: { error?: { code?: string } } };
   return errorWithData?.data?.error?.code === "model_not_found";
 }
 
+function isValidPillar(value: string): value is Pillar {
+  return value === "academic" || value === "soft" || value === "cte";
+}
+
+function normalizeContent(content: unknown): string {
+  if (typeof content === "string") {
+    return content;
+  }
+
+  if (Array.isArray(content)) {
+    return content
+      .map((entry) => {
+        if (typeof entry === "string") return entry;
+        if (entry && typeof entry === "object" && "text" in entry) {
+          const textValue = (entry as { text?: unknown }).text;
+          return typeof textValue === "string" ? textValue : "";
+        }
+        return "";
+      })
+      .join(" ")
+      .trim();
+  }
+
+  if (content && typeof content === "object" && "text" in content) {
+    const textValue = (content as { text?: unknown }).text;
+    if (typeof textValue === "string") {
+      return textValue;
+    }
+  }
+
+  return "";
+}
+
+function getLastUserMessageContent(messages: CoreMessage[]): string {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const message = messages[i];
+    if (message.role === "user") {
+      return normalizeContent(message.content);
+    }
+  }
+  return "";
+}
+
+function formatLessonsForPrompt(lessons: LessonRecord[]): string {
+  if (lessons.length === 0) {
+    return "No catalog matches were found for the latest request.";
+  }
+
+  return lessons
+    .map(
+      (lesson) =>
+        `• ${lesson.code}: ${lesson.lesson} — ${lesson.course} / ${lesson.subject} / ${lesson.unit}\n  Description: ${lesson.description}`
+    )
+    .join("\n");
+}
+
+function getCatalogContext(
+  query: string,
+  pillar: string
+): { summary: string; matches: LessonRecord[] } {
+  const normalizedQuery = query.trim();
+  const pillarFilter = isValidPillar(pillar) ? (pillar as Pillar) : undefined;
+
+  if (!normalizedQuery) {
+    return {
+      summary:
+        "No user query text was available to perform a catalog search. Inform the user if you cannot provide grounded lessons.",
+      matches: [],
+    };
+  }
+
+  const matches = searchLessons(normalizedQuery, { pillar: pillarFilter }).slice(0, 10);
+
+  if (matches.length === 0) {
+    return {
+      summary: `Catalog search for "${normalizedQuery}" returned no results. Be explicit about the lack of matches instead of guessing.`,
+      matches,
+    };
+  }
+
+  return {
+    summary: `Catalog search for "${normalizedQuery}"${
+      pillarFilter ? ` within the ${pillarFilter} pillar` : ""
+    } produced ${matches.length} match(es). Prioritize these when responding and cite their codes.\n${formatLessonsForPrompt(
+      matches
+    )}`,
+    matches,
+  };
+}
+
 function generateSystemPrompt(
   pillar: string,
   industry: string,
-  toolSource: "mcp" | "local"
+  catalogSummary: string
 ): string {
   const pillarContextMap = {
     academic:
@@ -101,17 +124,11 @@ function generateSystemPrompt(
     pillarContextMap[pillar as keyof typeof pillarContextMap] ??
     pillarContextMap.academic;
 
-  const toolExpectation =
-    toolSource === "mcp"
-      ? "Use the MCP tools to ground every recommendation in verified catalog data."
-      : "You are running in catalog fallback mode. The only available knowledge comes from the embedded Aztec catalog tools—call `search_lessons` (and any other relevant tool) before you answer so every recommendation is backed by real lesson codes. If the tools do not return supporting lessons, clearly tell the user you could not find a match instead of guessing.";
-
   return `You are the Aztec IET Assistant, helping staff create and retrieve educational content from Aztec's curriculum catalog.
 
 CURRENT CONTEXT:
 - Pillar: ${pillar} (${pillarContext})
 - Target Industry: ${industry}
-- Tool mode: ${toolSource === "mcp" ? "Model Context Protocol (remote server)" : "Local catalog fallback"}
 
 INSTRUCTIONS:
 1. All recommendations and content must be grounded in Aztec lesson codes from the catalog
@@ -120,16 +137,10 @@ INSTRUCTIONS:
 4. Keep responses concise and actionable
 5. For ${industry} contexts, use industry-appropriate terminology and realistic scenarios
 6. When students need placement or remediation, use the catalog to recommend specific entry points
-7. ${toolExpectation}
+7. Use the catalog context provided below to justify every recommendation. If the context indicates there were no matches, clearly state that you could not find a relevant lesson instead of fabricating one.
 
-AVAILABLE TOOLS:
-- search_lessons: Find lessons by topic, pillar, or code
-- get_sequence: Get ordered course structure with prerequisites
-- apply_locator_results: Recommend placement based on assessment scores
-- generate_contextualized_soft_skill: Create industry-specific soft skills scenarios
-- generate_contextualized_academic: Create industry-contextualized academic content
-- remediation_plan_from_cert_gaps: Build remediation plans from certification exam gaps
-- program_requirements: Get certification program details
+CATALOG CONTEXT FOR THE LATEST USER REQUEST:
+${catalogSummary}
 
 Always prioritize accuracy and cite specific lesson codes in your recommendations.`;
 }
@@ -137,7 +148,12 @@ Always prioritize accuracy and cite specific lesson codes in your recommendation
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { messages, conversationId, pillar = "academic", industry = "healthcare" } = body;
+    const {
+      messages: rawMessages,
+      conversationId,
+      pillar = "academic",
+      industry = "healthcare",
+    } = body;
 
     if (!OPENAI_API_KEY) {
       return new Response(
@@ -146,31 +162,25 @@ export async function POST(req: Request) {
       );
     }
 
-    const mcpTools = await getMCPTools();
-    const hasMcpTools = Object.keys(mcpTools).length > 0;
-    const toolSource: "mcp" | "local" = hasMcpTools ? "mcp" : "local";
-    const tools = hasMcpTools ? mcpTools : getLocalTools();
+    const messages: CoreMessage[] = Array.isArray(rawMessages)
+      ? rawMessages.map((message: CoreMessage) => ({
+          role: message.role,
+          content: normalizeContent(message.content),
+        }))
+      : [];
 
-    if (!hasMcpTools) {
-      console.warn(
-        "Falling back to embedded catalog tools because MCP server is unavailable."
-      );
-    }
+    const latestUserText = getLastUserMessageContent(messages);
+    const { summary: catalogSummary } = getCatalogContext(latestUserText, pillar);
 
     const createStream = async (modelName: string) =>
       streamText({
         model: openai(modelName),
-        system: generateSystemPrompt(pillar, industry, toolSource),
+        system: generateSystemPrompt(pillar, industry, catalogSummary),
         messages,
-        tools,
-        maxSteps: 5,
         onFinish: async ({ text }) => {
           if (conversationId) {
-            await saveMessage(
-              conversationId,
-              "user",
-              messages[messages.length - 1].content
-            );
+            const userContent = latestUserText || messages[messages.length - 1]?.content || "";
+            await saveMessage(conversationId, "user", userContent);
             await saveMessage(conversationId, "assistant", text);
 
             if (messages.length === 1) {

@@ -49,32 +49,9 @@ OPENAI_MODEL=gpt-4o-mini
 
 Use this if your OpenAI account has access to a specific model (for example, `gpt-4.1` or an enterprise model). If the provided model is unavailable at runtime, the app automatically falls back to `gpt-4o-mini` so end users can continue chatting.
 
-### Optional Variables (MCP Server)
+### Built-in Catalog Data
 
-#### 4. MCP Server Configuration
-
-**For initial testing (Option A - Skip for now):**
-```
-# Don't add these yet - the app works without MCP
-```
-
-**For full functionality (Option B - After deploying MCP):**
-```
-MCP_URL=https://your-mcp-server-url.onrender.com/mcp
-MCP_API_KEY=generate_a_secure_random_key_here
-```
-
-**What is MCP?**
-- MCP (Model Context Protocol) server provides tools for the AI
-- It gives the AI access to student data, IEP information, etc.
-- It's a separate backend service you need to deploy separately
-- The web app works for basic chat WITHOUT it
-
-**Deploying MCP Server:**
-1. See `DEPLOYMENT.md` for MCP deployment instructions
-2. Deploy to Render, Railway, or another service
-3. Get the deployed URL
-4. Add `MCP_URL` and `MCP_API_KEY` to Vercel
+The Aztec curriculum spreadsheet (`data/Samples for AI prototype.xlsx`) ships with the app and is parsed directly inside the Vercel serverless function. No additional environment variables are required to enable catalog search—just keep the file in the repository when you deploy.
 
 ---
 
@@ -112,22 +89,12 @@ MCP_API_KEY=generate_a_secure_random_key_here
 
 ## Complete Variable List for Copy/Paste
 
-**For Vercel (without MCP):**
+**For Vercel:**
 ```
 OPENAI_API_KEY=sk-proj-YOUR_KEY_HERE
 OPENAI_MODEL=gpt-4o-mini
 NEXT_PUBLIC_SUPABASE_URL=https://nqfrgrkamvrkoyssgtbx.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=YOUR_ANON_KEY_HERE
-```
-
-**For Vercel (with MCP later):**
-```
-OPENAI_API_KEY=sk-proj-YOUR_KEY_HERE
-OPENAI_MODEL=gpt-4o-mini
-NEXT_PUBLIC_SUPABASE_URL=https://nqfrgrkamvrkoyssgtbx.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=YOUR_ANON_KEY_HERE
-MCP_URL=https://your-mcp-server.onrender.com/mcp
-MCP_API_KEY=YOUR_SECURE_KEY_HERE
 ```
 
 ---
@@ -149,11 +116,7 @@ OPENAI_API_KEY=sk-proj-YOUR_KEY_HERE
 OPENAI_MODEL=gpt-4o-mini
 NEXT_PUBLIC_SUPABASE_URL=https://nqfrgrkamvrkoyssgtbx.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=YOUR_ANON_KEY_HERE
-MCP_URL=http://localhost:3001/mcp
-MCP_API_KEY=dev-secret-key
 ```
-
-**Note:** For local development, MCP_URL uses `localhost:3001` because you run the MCP server locally.
 
 ---
 
@@ -169,10 +132,10 @@ MCP_API_KEY=dev-secret-key
 - Check anon key starts with `eyJ`
 - Make sure you're using `NEXT_PUBLIC_` prefix (required for Next.js)
 
-### Issue: "MCP server not responding"
-- For Vercel: Check if MCP server is deployed and running
-- For local: Make sure MCP server is running on port 3001
-- Try removing MCP variables to test without MCP features
+### Issue: "Catalog search returned no matches"
+- Confirm the wording of your prompt contains the keywords you expect
+- Verify `data/Samples for AI prototype.xlsx` includes the lessons you need
+- If you recently updated the spreadsheet, redeploy so the new file ships with the build
 
 ---
 
@@ -207,7 +170,6 @@ These are prefixed with `NEXT_PUBLIC_` because they're used in the browser. The 
 
 ### ❌ Keep Secret (Backend Only)
 - `OPENAI_API_KEY`
-- `MCP_API_KEY`
 - Supabase `service_role` key (not used in this project)
 
 These are only used in server-side code and never exposed to the browser.
@@ -220,7 +182,4 @@ These are only used in server-side code and never exposed to the browser.
 2. ✅ Add the 3 required variables to Vercel
 3. ✅ Deploy or redeploy
 4. ✅ Test the app
-5. ⏸️ Deploy MCP server later (optional for now)
-6. ⏸️ Add MCP variables when ready
-
-The app will work great with just the OpenAI and Supabase variables. MCP adds advanced features but isn't required for basic functionality.
+5. 🎉 Enjoy catalog-grounded answers with just the built-in Excel file

@@ -54,8 +54,7 @@ The project includes a `vercel.json` file that solves this:
 3. **Environment Variables:**
    ```
    OPENAI_API_KEY=your_openai_key
-   MCP_URL=http://localhost:3001/mcp
-   MCP_API_KEY=your_secure_key
+   OPENAI_MODEL=gpt-4o-mini
    NEXT_PUBLIC_SUPABASE_URL=https://nrlwfowagmrefkloncjv.supabase.co
    NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5ybHdmb3dhZ21yZWZrbG9uY2p2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk1MTg2MzAsImV4cCI6MjA3NTA5NDYzMH0.eO2DEhcyQALSqFgF-y8uUmN6kV2JrBlVBxg65DJmpN8
    ```
@@ -82,8 +81,7 @@ Route (app)                              Size     First Load JS
 
 You could move all Next.js files from `apps/web/` to root `/`, but this:
 - Loses the monorepo structure
-- Makes it harder to deploy the MCP server separately
-- Mixing concerns in one directory
+- Mixes concerns in one directory
 
 ## Troubleshooting
 
@@ -102,4 +100,4 @@ npm run build
 
 ## After Deployment
 
-Update `MCP_URL` environment variable once you deploy the MCP server (see `DEPLOYMENT.md` for MCP server deployment instructions).
+Once deployed, confirm the catalog spreadsheet is present and that chat responses cite real lesson codes.
