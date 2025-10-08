@@ -163,10 +163,20 @@ export async function POST(req: Request) {
     }
 
     const messages: CoreMessage[] = Array.isArray(rawMessages)
-      ? rawMessages.map((message: CoreMessage) => ({
-          role: message.role,
-          content: normalizeContent(message.content),
-        }))
+      ? rawMessages.map((message: CoreMessage) => {
+          if (
+            message.role === "user" ||
+            message.role === "assistant" ||
+            message.role === "system"
+          ) {
+            return {
+              ...message,
+              content: normalizeContent(message.content),
+            };
+          }
+
+          return message;
+        })
       : [];
 
     const latestUserText = getLastUserMessageContent(messages);
