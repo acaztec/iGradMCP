@@ -7,6 +7,8 @@ import { saveMessage, updateConversationTitle } from "@/lib/db";
 const MCP_URL = process.env.MCP_URL || "http://localhost:3001/mcp";
 const MCP_API_KEY = process.env.MCP_API_KEY || "dev-secret-key";
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const DEFAULT_OPENAI_MODEL = "gpt-4o-mini";
+const OPENAI_MODEL = process.env.OPENAI_MODEL || DEFAULT_OPENAI_MODEL;
 
 interface MCPTool {
   name: string;
@@ -74,6 +76,11 @@ async function getMCPTools(): Promise<Record<string, any>> {
   }
 }
 
+function isModelNotFoundError(error: unknown): boolean {
+  const errorWithData = error as { data?: { error?: { code?: string } } };
+  return errorWithData?.data?.error?.code === "model_not_found";
+}
+
 function generateSystemPrompt(pillar: string, industry: string): string {
   const pillarContext = {
     academic:
@@ -122,27 +129,62 @@ export async function POST(req: Request) {
 
     const mcpTools = await getMCPTools();
 
-    const result = await streamText({
-      model: openai("gpt-4-turbo"),
-      system: generateSystemPrompt(pillar, industry),
-      messages,
-      tools: mcpTools,
-      maxSteps: 5,
-      onFinish: async ({ text, finishReason }) => {
-        if (conversationId) {
-          await saveMessage(conversationId, "user", messages[messages.length - 1].content);
-          await saveMessage(conversationId, "assistant", text);
+    const createStream = async (modelName: string) =>
+      streamText({
+        model: openai(modelName),
+        system: generateSystemPrompt(pillar, industry),
+        messages,
+        tools: mcpTools,
+        maxSteps: 5,
+        onFinish: async ({ text }) => {
+          if (conversationId) {
+            await saveMessage(
+              conversationId,
+              "user",
+              messages[messages.length - 1].content
+            );
+            await saveMessage(conversationId, "assistant", text);
 
-          if (messages.length === 1) {
-            const title = text.substring(0, 60) + (text.length > 60 ? "..." : "");
-            await updateConversationTitle(conversationId, title);
+            if (messages.length === 1) {
+              const title = text.substring(0, 60) + (text.length > 60 ? "..." : "");
+              await updateConversationTitle(conversationId, title);
+            }
           }
-        }
-      },
-    });
+        },
+      });
+
+    let result: Awaited<ReturnType<typeof createStream>>;
+
+    try {
+      result = await createStream(OPENAI_MODEL);
+    } catch (error) {
+      if (isModelNotFoundError(error) && OPENAI_MODEL !== DEFAULT_OPENAI_MODEL) {
+        console.warn(
+          `Model "${OPENAI_MODEL}" is unavailable. Falling back to "${DEFAULT_OPENAI_MODEL}".`
+        );
+        result = await createStream(DEFAULT_OPENAI_MODEL);
+      } else {
+        throw error;
+      }
+    }
 
     return result.toDataStreamResponse();
   } catch (error) {
+    if (isModelNotFoundError(error)) {
+      const attemptedModelMessage =
+        OPENAI_MODEL !== DEFAULT_OPENAI_MODEL
+          ? `Tried "${OPENAI_MODEL}" and fallback "${DEFAULT_OPENAI_MODEL}".`
+          : `Tried "${DEFAULT_OPENAI_MODEL}".`;
+
+      console.error("Chat API error: configured OpenAI model is unavailable", error);
+      return new Response(
+        JSON.stringify({
+          error: `The configured OpenAI model is unavailable. ${attemptedModelMessage} Update OPENAI_MODEL or ensure your account has access to at least one supported model.`,
+        }),
+        { status: 502 }
+      );
+    }
+
     console.error("Chat API error:", error);
     return new Response(
       JSON.stringify({ error: "Internal server error" }),

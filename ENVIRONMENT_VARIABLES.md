@@ -38,9 +38,20 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbG...your_actual_anon_key...
 
 ---
 
+### Optional Variables (Model Selection)
+
+#### 3. OpenAI Model (optional)
+
+``` 
+# Defaults to gpt-4o-mini if not set
+OPENAI_MODEL=gpt-4o-mini
+```
+
+Use this if your OpenAI account has access to a specific model (for example, `gpt-4.1` or an enterprise model). If the provided model is unavailable at runtime, the app automatically falls back to `gpt-4o-mini` so end users can continue chatting.
+
 ### Optional Variables (MCP Server)
 
-#### 3. MCP Server Configuration
+#### 4. MCP Server Configuration
 
 **For initial testing (Option A - Skip for now):**
 ```
@@ -104,6 +115,7 @@ MCP_API_KEY=generate_a_secure_random_key_here
 **For Vercel (without MCP):**
 ```
 OPENAI_API_KEY=sk-proj-YOUR_KEY_HERE
+OPENAI_MODEL=gpt-4o-mini
 NEXT_PUBLIC_SUPABASE_URL=https://nqfrgrkamvrkoyssgtbx.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=YOUR_ANON_KEY_HERE
 ```
@@ -111,6 +123,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=YOUR_ANON_KEY_HERE
 **For Vercel (with MCP later):**
 ```
 OPENAI_API_KEY=sk-proj-YOUR_KEY_HERE
+OPENAI_MODEL=gpt-4o-mini
 NEXT_PUBLIC_SUPABASE_URL=https://nqfrgrkamvrkoyssgtbx.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=YOUR_ANON_KEY_HERE
 MCP_URL=https://your-mcp-server.onrender.com/mcp
@@ -133,6 +146,7 @@ cp .env.example .env
 **Local `.env` file:**
 ```
 OPENAI_API_KEY=sk-proj-YOUR_KEY_HERE
+OPENAI_MODEL=gpt-4o-mini
 NEXT_PUBLIC_SUPABASE_URL=https://nqfrgrkamvrkoyssgtbx.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=YOUR_ANON_KEY_HERE
 MCP_URL=http://localhost:3001/mcp
