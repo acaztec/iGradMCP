@@ -27,15 +27,14 @@ export default function Home() {
     return "anonymous";
   });
 
-  const { messages, input, handleInputChange, handleSubmit, isLoading, setInput } =
-    useChat({
-      api: "/api/chat",
-      body: {
-        conversationId,
-        pillar,
-        industry,
-      },
-    });
+  const { messages, input, handleInputChange, handleSubmit, isLoading } = useChat({
+    api: "/api/chat",
+    body: {
+      conversationId,
+      pillar,
+      industry,
+    },
+  });
 
   useEffect(() => {
     async function initializePreferences() {
@@ -83,13 +82,6 @@ export default function Home() {
     }
   };
 
-  const handleComposerSubmit = (message: string) => {
-    setInput(message);
-    const form = document.createElement("form");
-    const submitEvent = new Event("submit", { bubbles: true, cancelable: true });
-    handleSubmit(submitEvent as any);
-  };
-
   return (
     <div className="flex h-screen flex-col">
       <ChatHeader
@@ -103,7 +95,12 @@ export default function Home() {
           <MessageList messages={messages} />
         </div>
       </div>
-      <ChatComposer onSubmit={handleComposerSubmit} isLoading={isLoading} />
+      <ChatComposer
+        input={input}
+        onInputChange={handleInputChange}
+        onSubmit={handleSubmit}
+        isLoading={isLoading}
+      />
     </div>
   );
 }
