@@ -42,10 +42,20 @@ function resolveCatalogPath(): string {
 
   const candidateDirs = new Set<string>();
   const cwd = process.cwd();
+  const lambdaRoot = process.env.LAMBDA_TASK_ROOT;
 
   candidateDirs.add(path.resolve(cwd, "data"));
   candidateDirs.add(path.resolve(cwd, "../data"));
   candidateDirs.add(path.resolve(cwd, "../../data"));
+  candidateDirs.add(path.resolve(cwd, "workspace/iGradMCP/data"));
+
+  if (lambdaRoot) {
+    candidateDirs.add(path.resolve(lambdaRoot, "data"));
+    candidateDirs.add(path.resolve(lambdaRoot, "workspace/iGradMCP/data"));
+    candidateDirs.add(
+      path.resolve(lambdaRoot, "../workspace/iGradMCP/data")
+    );
+  }
 
   let currentDir = __dirname;
   for (let i = 0; i < 10; i += 1) {
@@ -53,16 +63,31 @@ function resolveCatalogPath(): string {
     currentDir = path.dirname(currentDir);
   }
 
+  const checkedPaths: string[] = [];
+
   for (const dir of candidateDirs) {
     const candidate = path.join(dir, CATALOG_FILENAME);
-    if (fs.existsSync(candidate)) {
+    checkedPaths.push(candidate);
+
+    if (!fs.existsSync(candidate)) {
+      continue;
+    }
+
+    try {
+      fs.accessSync(candidate, fs.constants.R_OK);
       return candidate;
+    } catch (error) {
+      console.warn(
+        `Catalog file found at "${candidate}" but is not readable:`,
+        error
+      );
     }
   }
 
   throw new Error(
     `Could not locate curriculum catalog at ${CATALOG_FILENAME}. ` +
-      "Ensure the data directory is available during runtime or provide an absolute path via the CATALOG_PATH environment variable."
+      "Ensure the data directory is available during runtime or provide an absolute path via the CATALOG_PATH environment variable. " +
+      `Checked: ${checkedPaths.join(", ")}`
   );
 }
 
@@ -81,7 +106,19 @@ function normalizePillar(sheetName: string): Pillar {
 }
 
 function loadCatalogFromDisk(): CatalogData {
-  const workbook = XLSX.readFile(resolveCatalogPath());
+  const catalogPath = resolveCatalogPath();
+  let fileBuffer: Buffer;
+
+  try {
+    fileBuffer = fs.readFileSync(catalogPath);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `Unable to read curriculum catalog at ${catalogPath}: ${message}`
+    );
+  }
+
+  const workbook = XLSX.read(fileBuffer, { type: "buffer" });
   const lessons: LessonRecord[] = [];
 
   for (const sheetName of workbook.SheetNames) {
