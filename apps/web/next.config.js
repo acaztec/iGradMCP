@@ -1,7 +1,6 @@
 const path = require("path");
 
 const catalogFile = path.join(
-  __dirname,
   "..",
   "..",
   "data",
