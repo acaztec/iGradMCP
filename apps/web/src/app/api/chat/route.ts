@@ -94,6 +94,8 @@ function parseYesNoResponse(content: string): boolean | null {
     /\babsolutely\b/,
     /\bi (do|have)\b/,
     /\bcompleted\b/,
+    /\bsure\b/,
+    /\byup\b/,
   ];
 
   const negativePatterns = [
@@ -102,6 +104,7 @@ function parseYesNoResponse(content: string): boolean | null {
     /\bdon't have\b/,
     /\bstill working\b/,
     /\bneed to earn\b/,
+    /\bnope\b/,
   ];
 
   if (positivePatterns.some((pattern) => pattern.test(normalized))) {
@@ -149,7 +152,11 @@ function parseSpreadsheetComfort(content: string): SpreadsheetComfort | null {
 function parseSkillConfidence(content: string): SkillConfidence | null {
   const normalized = normalizeText(content);
 
-  if (/have\s+good/.test(normalized) || /confident/.test(normalized)) {
+  if (
+    /have\s+good/.test(normalized) ||
+    /confident/.test(normalized) ||
+    /\bi('?m| am)\s+(pretty\s+)?(good|decent|solid)/.test(normalized)
+  ) {
     return "confident";
   }
 
@@ -173,6 +180,31 @@ function findFirstMeaningfulMessage(messages: string[], startIndex: number) {
   }
 
   return null;
+}
+
+function findParsedResponse<T>(
+  messages: string[],
+  startIndex: number,
+  parser: (content: string) => T | null
+) {
+  let lastEntry: { index: number; content: string } | null = null;
+
+  for (let index = startIndex + 1; index < messages.length; index += 1) {
+    const content = messages[index].trim();
+
+    if (content.length === 0) {
+      continue;
+    }
+
+    lastEntry = { index, content } as const;
+    const parsedValue = parser(content);
+
+    if (parsedValue !== null) {
+      return { entry: lastEntry, value: parsedValue } as const;
+    }
+  }
+
+  return { entry: lastEntry, value: null } as const;
 }
 
 function formatSoftSkillRecommendations(
@@ -302,21 +334,29 @@ function getAssistantReply(messages: ChatMessage[]): string {
     return `${pathway.label} guidance is coming soon in this demo. For now, pick "Certified Billing and Coding Specialist (CBCS)" to walk through the scripted experience.`;
   }
 
-  const diplomaEntry = findFirstMeaningfulMessage(userMessages, pathwayIndex);
+  const diplomaResult = findParsedResponse(
+    userMessages,
+    pathwayIndex,
+    parseYesNoResponse
+  );
 
-  if (!diplomaEntry) {
+  if (!diplomaResult.entry) {
     return "Do you have a high-school diploma or high-school equivalency?\n• Yes\n• No";
   }
 
-  const hasDiploma = parseYesNoResponse(diplomaEntry.content);
+  const hasDiploma = diplomaResult.value;
 
   if (hasDiploma === null) {
     return "Just a quick check—do you currently have a high-school diploma or high-school equivalency (GED/HiSET)?\n• Yes\n• No";
   }
 
-  const spreadsheetEntry = findFirstMeaningfulMessage(userMessages, diplomaEntry.index);
+  const spreadsheetResult = findParsedResponse(
+    userMessages,
+    diplomaResult.entry.index,
+    parseSpreadsheetComfort
+  );
 
-  if (!spreadsheetEntry) {
+  if (!spreadsheetResult.entry) {
     if (hasDiploma) {
       return "Great! Having a high-school diploma or high-school equivalency meets one of the CBCS requirements. How comfortable are you working with spreadsheets?\n• Very comfortable—I use spreadsheets frequently and consider myself an expert.\n• Somewhat comfortable—I occasionally use spreadsheets and know the basics.\n• Not comfortable—I rarely use or have never used spreadsheets.\n• What is a spreadsheet?";
     }
@@ -324,58 +364,64 @@ function getAssistantReply(messages: ChatMessage[]): string {
     return "Thanks for letting me know. We can plan for your high-school equivalency while you build coding skills. How comfortable are you working with spreadsheets?\n• Very comfortable—I use spreadsheets frequently and consider myself an expert.\n• Somewhat comfortable—I occasionally use spreadsheets and know the basics.\n• Not comfortable—I rarely use or have never used spreadsheets.\n• What is a spreadsheet?";
   }
 
-  const spreadsheetComfort = parseSpreadsheetComfort(spreadsheetEntry.content);
+  const spreadsheetComfort = spreadsheetResult.value;
 
   if (!spreadsheetComfort) {
     return "How comfortable are you working with spreadsheets?\n• Very comfortable—I use spreadsheets frequently and consider myself an expert.\n• Somewhat comfortable—I occasionally use spreadsheets and know the basics.\n• Not comfortable—I rarely use or have never used spreadsheets.\n• What is a spreadsheet?";
   }
 
-  const timeManagementEntry = findFirstMeaningfulMessage(
+  const timeManagementResult = findParsedResponse(
     userMessages,
-    spreadsheetEntry.index
+    spreadsheetResult.entry.index,
+    parseSkillConfidence
   );
 
-  if (!timeManagementEntry) {
+  if (!timeManagementResult.entry) {
     return "How do you feel about your time-management skills?\n• I have good time management skills.\n• I could use some suggestions for improving time-management skills.\n• I’m not sure what time management skills are.";
   }
 
-  const timeManagement = parseSkillConfidence(timeManagementEntry.content);
+  const timeManagement = timeManagementResult.value;
 
   if (!timeManagement) {
     return "Could you pick the option that best describes your time-management skills?\n• I have good time management skills.\n• I could use some suggestions for improving time-management skills.\n• I’m not sure what time management skills are.";
   }
 
-  const communicationEntry = findFirstMeaningfulMessage(
+  const communicationResult = findParsedResponse(
     userMessages,
-    timeManagementEntry.index
+    timeManagementResult.entry.index,
+    parseSkillConfidence
   );
 
-  if (!communicationEntry) {
+  if (!communicationResult.entry) {
     return "Here’s the next one: How do you feel about your communication skills?\n• I have good communication skills.\n• I could use some suggestions for improving communication skills.\n• I’m not sure what communication skills are.";
   }
 
-  const communication = parseSkillConfidence(communicationEntry.content);
+  const communication = communicationResult.value;
 
   if (!communication) {
     return "Please let me know which option fits your communication skills.\n• I have good communication skills.\n• I could use some suggestions for improving communication skills.\n• I’m not sure what communication skills are.";
   }
 
-  const teamworkEntry = findFirstMeaningfulMessage(
+  const teamworkResult = findParsedResponse(
     userMessages,
-    communicationEntry.index
+    communicationResult.entry.index,
+    parseSkillConfidence
   );
 
-  if (!teamworkEntry) {
+  if (!teamworkResult.entry) {
     return "Here’s the last question about soft skills: How do you feel about your ability to work with others?\n• I work well with others and feel confident in my skills in this area.\n• I could use some suggestions for improving how I work with others.\n• I’m not sure what skills are related to working well with others.";
   }
 
-  const teamwork = parseSkillConfidence(teamworkEntry.content);
+  const teamwork = teamworkResult.value;
 
   if (!teamwork) {
     return "Please choose the option that best describes how you work with others.\n• I work well with others and feel confident in my skills in this area.\n• I could use some suggestions for improving how I work with others.\n• I’m not sure what skills are related to working well with others.";
   }
 
-  const followUpEntry = findFirstMeaningfulMessage(userMessages, teamworkEntry.index);
+  const followUpEntry = findFirstMeaningfulMessage(
+    userMessages,
+    teamworkResult.entry.index
+  );
 
   if (followUpEntry) {
     return "Happy to help! Let me know whenever you want more resources or practice questions.";
