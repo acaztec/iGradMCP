@@ -1,8 +1,10 @@
 # Production Deployment Guide
 
-Follow these steps to deploy the Aztec IET Assistant to Vercel with the self-contained catalog search experience.
+Deploying the scripted demo only takes a few minutes.
 
 ## 1. Prepare the Repository
+
+Push your changes to GitHub:
 
 ```bash
 git remote add origin https://github.com/acaztec/iGradMCP.git
@@ -10,40 +12,28 @@ git branch -M main
 git push -u origin main
 ```
 
-## 2. Import the Project into Vercel
+## 2. Import into Vercel
 
-1. Go to https://vercel.com/new
-2. Import the repository `acaztec/iGradMCP`
-3. When prompted for **Root Directory**, enter `apps/web`
-4. Leave the build and install commands as defaults (Vercel detects Next.js automatically)
+1. Visit https://vercel.com/new.
+2. Select the `acaztec/iGradMCP` repository.
+3. When prompted for the **Root Directory**, enter `apps/web`.
+4. Accept the default build and install commands (Vercel automatically detects Next.js).
 
-## 3. Configure Environment Variables
+## 3. Environment Variables
 
-Add these variables in the Vercel dashboard (Production, Preview, and Development):
+None are required for this demo. If you extend the app with APIs or databases later, add them in the Vercel dashboard as needed.
 
-```
-OPENAI_API_KEY = your_openai_api_key
-OPENAI_MODEL = gpt-4o-mini
-NEXT_PUBLIC_SUPABASE_URL = https://nrlwfowagmrefkloncjv.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5ybHdmb3dhZ21yZWZrbG9uY2p2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk1MTg2MzAsImV4cCI6MjA3NTA5NDYzMH0.eO2DEhcyQALSqFgF-y8uUmN6kV2JrBlVBxg65DJmpN8
-```
+## 4. Deploy & Verify
 
-(Replace the anon key with your actual Supabase anon key.)
+Click **Deploy**. After the build completes:
 
-## 4. Deploy
-
-Click **Deploy**. Vercel will install dependencies inside `apps/web`, build the Next.js app, and bundle the Excel catalog automatically.
-
-## 5. Post-Deployment Checklist
-
-- Visit your Vercel URL and send a prompt such as “I want to be a pharmacy tech.”
-- Confirm the assistant responds with real lesson codes (e.g., `CBCS-201`).
-- If the response says no matches were found, verify that `data/Samples for AI prototype.xlsx` exists in the repository and redeploy if the file was updated.
+- Open the live URL.
+- Select the **Pharmacy Technician** pathway and walk through the prompts.
+- Confirm you receive the scripted lesson recommendations and next steps.
 
 ## Troubleshooting
 
-- **404 Errors:** Ensure the Root Directory is set to `apps/web`.
-- **Missing catalog file:** The build logs will show a warning if the Excel file cannot be found. Double-check the `data/` folder path.
-- **Model errors:** If a custom `OPENAI_MODEL` is unavailable, the API falls back to `gpt-4o-mini`. Update the env var if necessary.
+- **Build fails immediately:** Double-check the root directory is `apps/web`.
+- **UI looks different:** Ensure Tailwind styles compiled by running `npm run build` locally or redeploy.
 
-Once everything checks out, your team can rely on the hosted assistant without maintaining any additional services or localhost-only tooling.
+With those checks complete, the hosted demo mirrors the mock experience without any additional infrastructure.

@@ -1,246 +1,221 @@
-import { streamText, type CoreMessage } from "ai";
-import { openai } from "@ai-sdk/openai";
-import { saveMessage, updateConversationTitle } from "@/lib/db";
-import {
-  type Pillar,
-  type LessonRecord,
-  searchLessons,
-} from "@/lib/catalog";
+const PATHWAYS = [
+  {
+    id: "pharmacy-technician",
+    label: "Pharmacy Technician",
+    synonyms: [
+      "pharmacy technician",
+      "pharmacy tech",
+      "pharm tech",
+      "pharmacy pathway",
+    ],
+  },
+  {
+    id: "cbcs",
+    label: "Certified Coding and Billing Specialist (CBCS)",
+    synonyms: [
+      "cbcs",
+      "certified coding and billing specialist",
+      "billing and coding",
+      "coding and billing",
+    ],
+  },
+  {
+    id: "ccma",
+    label: "Certified Clinical Medical Assistant (CCMA)",
+    synonyms: [
+      "ccma",
+      "certified clinical medical assistant",
+      "clinical medical assistant",
+    ],
+  },
+  {
+    id: "cmaa",
+    label: "Certified Medical Administrative Assistant (CMAA)",
+    synonyms: [
+      "cmaa",
+      "certified medical administrative assistant",
+      "medical administrative assistant",
+    ],
+  },
+] as const;
 
-export const runtime = "nodejs";
+type PathwayId = (typeof PATHWAYS)[number]["id"];
 
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-const DEFAULT_OPENAI_MODEL = "gpt-4o-mini";
-const OPENAI_MODEL = process.env.OPENAI_MODEL || DEFAULT_OPENAI_MODEL;
+type ChatMessage = {
+  role: "user" | "assistant";
+  content: string;
+};
 
-function isModelNotFoundError(error: unknown): boolean {
-  const errorWithData = error as { data?: { error?: { code?: string } } };
-  return errorWithData?.data?.error?.code === "model_not_found";
+function normalizeText(value: string): string {
+  return value.replace(/\s+/g, " ").trim().toLowerCase();
 }
 
-function isValidPillar(value: string): value is Pillar {
-  return value === "academic" || value === "soft" || value === "cte";
-}
+function findPathway(content: string): { id: PathwayId; label: string } | null {
+  const normalized = normalizeText(content);
 
-function normalizeContent(content: unknown): string {
-  if (typeof content === "string") {
-    return content;
-  }
-
-  if (Array.isArray(content)) {
-    return content
-      .map((entry) => {
-        if (typeof entry === "string") return entry;
-        if (entry && typeof entry === "object" && "text" in entry) {
-          const textValue = (entry as { text?: unknown }).text;
-          return typeof textValue === "string" ? textValue : "";
-        }
-        return "";
-      })
-      .join(" ")
-      .trim();
-  }
-
-  if (content && typeof content === "object" && "text" in content) {
-    const textValue = (content as { text?: unknown }).text;
-    if (typeof textValue === "string") {
-      return textValue;
+  for (const pathway of PATHWAYS) {
+    if (pathway.synonyms.some((term) => normalized.includes(term))) {
+      return { id: pathway.id, label: pathway.label };
     }
   }
 
-  return "";
+  return null;
 }
 
-function getLastUserMessageContent(messages: CoreMessage[]): string {
-  for (let i = messages.length - 1; i >= 0; i -= 1) {
-    const message = messages[i];
-    if (message.role === "user") {
-      return normalizeContent(message.content);
+function getFirstPathwayChoice(messages: string[]) {
+  for (let index = 0; index < messages.length; index += 1) {
+    const pathway = findPathway(messages[index]);
+    if (pathway) {
+      return { pathway, index };
     }
   }
-  return "";
+
+  return { pathway: null, index: -1 } as const;
 }
 
-function formatLessonsForPrompt(lessons: LessonRecord[]): string {
-  if (lessons.length === 0) {
-    return "No catalog matches were found for the latest request.";
+function parseYesNoResponse(content: string): boolean | null {
+  const normalized = normalizeText(content);
+
+  const positivePatterns = [
+    /^y(es)?\b/,
+    /\bdefinitely\b/,
+    /\babsolutely\b/,
+    /\bi (do|have)\b/,
+    /\bcompleted\b/,
+  ];
+
+  const negativePatterns = [
+    /^no?\b/,
+    /\bnot yet\b/,
+    /\bdon't have\b/,
+    /\bstill working\b/,
+    /\bneed to earn\b/,
+  ];
+
+  if (positivePatterns.some((pattern) => pattern.test(normalized))) {
+    return true;
   }
 
-  return lessons
-    .map(
-      (lesson) =>
-        `• ${lesson.code}: ${lesson.lesson} — ${lesson.course} / ${lesson.subject} / ${lesson.unit}\n  Description: ${lesson.description}`
-    )
-    .join("\n");
+  if (negativePatterns.some((pattern) => pattern.test(normalized))) {
+    return false;
+  }
+
+  return null;
 }
 
-function getCatalogContext(
-  query: string,
-  pillar: string
-): { summary: string; matches: LessonRecord[] } {
-  const normalizedQuery = query.trim();
-  const pillarFilter = isValidPillar(pillar) ? (pillar as Pillar) : undefined;
-
-  if (!normalizedQuery) {
-    return {
-      summary:
-        "No user query text was available to perform a catalog search. Inform the user if you cannot provide grounded lessons.",
-      matches: [],
-    };
+function findFirstMeaningfulMessage(messages: string[], startIndex: number) {
+  for (let index = startIndex + 1; index < messages.length; index += 1) {
+    const content = messages[index].trim();
+    if (content.length > 0) {
+      return { index, content };
+    }
   }
 
-  const matches = searchLessons(normalizedQuery, { pillar: pillarFilter }).slice(0, 10);
-
-  if (matches.length === 0) {
-    return {
-      summary: `Catalog search for "${normalizedQuery}" returned no results. Be explicit about the lack of matches instead of guessing.`,
-      matches,
-    };
-  }
-
-  return {
-    summary: `Catalog search for "${normalizedQuery}"${
-      pillarFilter ? ` within the ${pillarFilter} pillar` : ""
-    } produced ${matches.length} match(es). Prioritize these when responding and cite their codes.\n${formatLessonsForPrompt(
-      matches
-    )}`,
-    matches,
-  };
+  return null;
 }
 
-function generateSystemPrompt(
-  pillar: string,
-  industry: string,
-  catalogSummary: string
+function formatSoftSkillsSummary(input: string): string {
+  const trimmed = input.replace(/\s+/g, " ").trim();
+  if (!trimmed) return "communication, teamwork, and professionalism";
+  if (trimmed.length <= 180) return trimmed;
+  return `${trimmed.slice(0, 177)}...`;
+}
+
+function buildPharmacyPlan(
+  hasDiploma: boolean,
+  softSkillsFocus: string
 ): string {
-  const pillarContextMap = {
-    academic:
-      "Bridge Pre-HSE (Academic) - Focus on foundational reading, math, and language skills for adult learners preparing for high school equivalency exams.",
-    soft: "Ready for Work (Soft Skills) - Emphasize workplace readiness, professional communication, teamwork, and industry-specific soft skills.",
-    cte: "CBCS/CTE (Career Technical Education) - Concentrate on certification preparation, technical competencies, and career-specific training.",
-  } as const;
+  const softSkillsSummary = formatSoftSkillsSummary(softSkillsFocus);
 
-  const pillarContext =
-    pillarContextMap[pillar as keyof typeof pillarContextMap] ??
-    pillarContextMap.academic;
+  const academicSection = hasDiploma
+    ? `Academic Foundation:\n• You already meet the high school requirement—great! Complete the short "Pharmacy Math Refresher" module to revisit key ratios, conversions, and dosage calculations before compounding labs.`
+    : `Academic Foundation:\n• Start with Aztec's GED/HiSET prep units for math, reading, and science.\n• Schedule time each week for the official practice tests and track your score growth.\n• Revisit pharmacy-specific math mini-lessons once you're comfortable with fractions, proportions, and basic algebra.`;
 
-  return `You are the Aztec IET Assistant, helping staff create and retrieve educational content from Aztec's curriculum catalog.
+  return [
+    "Here's a personalized Pharmacy Technician pathway for you:",
+    academicSection,
+    `Soft Skills Focus:\n• Use "Ready for Work" modules to strengthen ${softSkillsSummary}.\n• Practice scenario prompts about supporting patients and collaborating with pharmacists.\n• Build a reflection journal that ties your soft-skill wins back to pharmacy settings.`,
+    "Technical Training:\n• PT-101: Orientation to Pharmacy Practice – roles, pharmacy workflow, safety, HIPAA.\n• PT-205: Prescription Processing & Dispensing – interpreting orders, labeling, filling scripts.\n• PT-310: Sterile Compounding Basics – aseptic technique, garbing, and cleanroom routines.\n• PT-330: Pharmacy Calculations Lab – dimensional analysis, IV flow rates, and inventory math.",
+    "Next Steps:\n1. Block study time for your academic and soft-skill goals each week.\n2. Enroll in the technical modules in the order above and log your lab hours.\n3. Keep me posted on progress or new questions—I can suggest make-up lessons or additional practice any time.",
+  ].join("\n\n");
+}
 
-CURRENT CONTEXT:
-- Pillar: ${pillar} (${pillarContext})
-- Target Industry: ${industry}
+function getAssistantReply(messages: ChatMessage[]): string {
+  const userMessages = messages
+    .filter((message) => message.role === "user")
+    .map((message) => message.content);
 
-INSTRUCTIONS:
-1. All recommendations and content must be grounded in Aztec lesson codes from the catalog
-2. When generating scenarios or content, make them realistic and specific to ${industry}
-3. Always cite lesson codes (e.g., "CBCS-101") when recommending materials
-4. Keep responses concise and actionable
-5. For ${industry} contexts, use industry-appropriate terminology and realistic scenarios
-6. When students need placement or remediation, use the catalog to recommend specific entry points
-7. Use the catalog context provided below to justify every recommendation. If the context indicates there were no matches, clearly state that you could not find a relevant lesson instead of fabricating one.
+  if (userMessages.length === 0) {
+    return "Hi there! Choose one of the pathway buttons to get started, or tell me which certification you want to explore.";
+  }
 
-CATALOG CONTEXT FOR THE LATEST USER REQUEST:
-${catalogSummary}
+  const { pathway, index: pathwayIndex } = getFirstPathwayChoice(userMessages);
 
-Always prioritize accuracy and cite specific lesson codes in your recommendations.`;
+  if (!pathway) {
+    return "I didn't catch which pathway you want to explore. Tap one of the pathway buttons above—Pharmacy Technician, CBCS, CCMA, or CMAA—to continue.";
+  }
+
+  if (pathway.id !== "pharmacy-technician") {
+    return `${pathway.label} content is coming soon in this demo. For now, pick "Pharmacy Technician" to walk through the full guided experience.`;
+  }
+
+  const diplomaEntry = findFirstMeaningfulMessage(userMessages, pathwayIndex);
+
+  if (!diplomaEntry) {
+    return "Great choice! Do you currently have a high school diploma or equivalent (GED/HiSET)?";
+  }
+
+  const diplomaAnswer = parseYesNoResponse(diplomaEntry.content);
+
+  if (diplomaAnswer === null) {
+    return "Just a quick check—do you already have a high school diploma or GED/HiSET?";
+  }
+
+  const softSkillsEntry = findFirstMeaningfulMessage(userMessages, diplomaEntry.index);
+
+  if (!softSkillsEntry) {
+    if (diplomaAnswer) {
+      return "Excellent! We'll dive into the technical training next. Before we do, which workplace or professional skills would you like to strengthen?";
+    }
+
+    return "No worries—we can build that academic foundation first. Start with GED/HiSET prep for math, reading, and science, then let me know: which workplace or professional skills would you like to focus on while you work on academics?";
+  }
+
+  const followUpEntry = findFirstMeaningfulMessage(userMessages, softSkillsEntry.index);
+
+  if (followUpEntry) {
+    return "Happy to help! Keep me posted on your progress or ask for more lesson ideas whenever you need them.";
+  }
+
+  return buildPharmacyPlan(diplomaAnswer, softSkillsEntry.content);
 }
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const {
-      messages: rawMessages,
-      conversationId,
-      pillar = "academic",
-      industry = "healthcare",
-    } = body;
+    const rawMessages = Array.isArray(body?.messages) ? body.messages : [];
 
-    if (!OPENAI_API_KEY) {
-      return new Response(
-        JSON.stringify({ error: "OpenAI API key not configured" }),
-        { status: 500 }
-      );
-    }
+    const messages: ChatMessage[] = rawMessages
+      .map((message: any) => ({
+        role: message?.role === "assistant" ? "assistant" : "user",
+        content: typeof message?.content === "string" ? message.content : "",
+      }))
+      .filter((message: ChatMessage) => message.content.trim().length > 0);
 
-    const messages: CoreMessage[] = Array.isArray(rawMessages)
-      ? rawMessages.map((message: CoreMessage) => {
-          if (
-            message.role === "user" ||
-            message.role === "assistant" ||
-            message.role === "system"
-          ) {
-            return {
-              ...message,
-              content: normalizeContent(message.content),
-            };
-          }
+    const reply = getAssistantReply(messages);
 
-          return message;
-        })
-      : [];
-
-    const latestUserText = getLastUserMessageContent(messages);
-    const { summary: catalogSummary } = getCatalogContext(latestUserText, pillar);
-
-    const createStream = async (modelName: string) =>
-      streamText({
-        model: openai(modelName),
-        system: generateSystemPrompt(pillar, industry, catalogSummary),
-        messages,
-        onFinish: async ({ text }) => {
-          if (conversationId) {
-            const lastMessage = messages[messages.length - 1];
-            const fallbackUserContent = lastMessage
-              ? normalizeContent(lastMessage.content)
-              : "";
-            const userContent = latestUserText || fallbackUserContent;
-            await saveMessage(conversationId, "user", userContent);
-            await saveMessage(conversationId, "assistant", text);
-
-            if (messages.length === 1) {
-              const title = text.substring(0, 60) + (text.length > 60 ? "..." : "");
-              await updateConversationTitle(conversationId, title);
-            }
-          }
-        },
-      });
-
-    let result: Awaited<ReturnType<typeof createStream>>;
-
-    try {
-      result = await createStream(OPENAI_MODEL);
-    } catch (error) {
-      if (isModelNotFoundError(error) && OPENAI_MODEL !== DEFAULT_OPENAI_MODEL) {
-        console.warn(
-          `Model "${OPENAI_MODEL}" is unavailable. Falling back to "${DEFAULT_OPENAI_MODEL}".`
-        );
-        result = await createStream(DEFAULT_OPENAI_MODEL);
-      } else {
-        throw error;
-      }
-    }
-
-    return result.toDataStreamResponse();
+    return new Response(JSON.stringify({ reply }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
   } catch (error) {
-    if (isModelNotFoundError(error)) {
-      const attemptedModelMessage =
-        OPENAI_MODEL !== DEFAULT_OPENAI_MODEL
-          ? `Tried "${OPENAI_MODEL}" and fallback "${DEFAULT_OPENAI_MODEL}".`
-          : `Tried "${DEFAULT_OPENAI_MODEL}".`;
-
-      console.error("Chat API error: configured OpenAI model is unavailable", error);
-      return new Response(
-        JSON.stringify({
-          error: `The configured OpenAI model is unavailable. ${attemptedModelMessage} Update OPENAI_MODEL or ensure your account has access to at least one supported model.`,
-        }),
-        { status: 502 }
-      );
-    }
-
     console.error("Chat API error:", error);
     return new Response(
-      JSON.stringify({ error: "Internal server error" }),
-      { status: 500 }
+      JSON.stringify({ reply: "Sorry, something went wrong. Please try again." }),
+      {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      }
     );
   }
 }

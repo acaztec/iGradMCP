@@ -1,106 +1,142 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useChat } from "ai/react";
-import ChatHeader from "@/components/ChatHeader";
+import { useState, type ChangeEventHandler, type FormEventHandler } from "react";
 import MessageList from "@/components/MessageList";
 import ChatComposer from "@/components/ChatComposer";
-import {
-  getOrCreatePreferences,
-  updatePreferences,
-  createConversation,
-} from "@/lib/db";
+import PathwaySelector from "@/components/PathwaySelector";
+import type { ChatMessage } from "@/types/chat";
+
+const PATHWAY_OPTIONS = [
+  {
+    id: "pharmacy-technician",
+    label: "Pharmacy Technician",
+    description: "PTCB-aligned coursework and lab practice for pharmacy teams.",
+    status: "available" as const,
+  },
+  {
+    id: "cbcs",
+    label: "Certified Coding and Billing Specialist (CBCS)",
+    description: "Coding accuracy, claims management, and revenue cycle skills.",
+    status: "coming-soon" as const,
+  },
+  {
+    id: "ccma",
+    label: "Certified Clinical Medical Assistant (CCMA)",
+    description: "Hands-on patient care, clinical procedures, and exam preparation.",
+    status: "coming-soon" as const,
+  },
+  {
+    id: "cmaa",
+    label: "Certified Medical Administrative Assistant (CMAA)",
+    description: "Front-desk operations, scheduling systems, and medical records.",
+    status: "coming-soon" as const,
+  },
+];
 
 export default function Home() {
-  const [conversationId, setConversationId] = useState<string | null>(null);
-  const [pillar, setPillar] = useState("academic");
-  const [industry, setIndustry] = useState("healthcare");
-  const [userId] = useState(() => {
-    if (typeof window !== "undefined") {
-      let id = localStorage.getItem("aztec_user_id");
-      if (!id) {
-        id = `user_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-        localStorage.setItem("aztec_user_id", id);
-      }
-      return id;
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [input, setInput] = useState("");
+  const [selectedPathway, setSelectedPathway] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const sendMessage = async (content: string) => {
+    const trimmedContent = content.trim();
+    if (!trimmedContent || isLoading) {
+      return;
     }
-    return "anonymous";
-  });
 
-  const { messages, input, handleInputChange, handleSubmit, isLoading } = useChat({
-    api: "/api/chat",
-    body: {
-      conversationId,
-      pillar,
-      industry,
-    },
-  });
+    const timestamp = new Date().toISOString();
+    const userMessage: ChatMessage = {
+      id: `user-${timestamp}`,
+      role: "user",
+      content: trimmedContent,
+      createdAt: timestamp,
+    };
 
-  useEffect(() => {
-    async function initializePreferences() {
-      try {
-        const prefs = await getOrCreatePreferences(userId);
-        setPillar(prefs.pillar);
-        setIndustry(prefs.industry);
-      } catch (error) {
-        console.error("Failed to load preferences:", error);
-      }
-    }
-    initializePreferences();
-  }, [userId]);
+    const conversationForRequest = [...messages, userMessage];
+    setMessages(conversationForRequest);
+    setInput("");
+    setIsLoading(true);
 
-  useEffect(() => {
-    async function initializeConversation() {
-      if (!conversationId) {
-        try {
-          const conv = await createConversation(userId, pillar, industry);
-          setConversationId(conv.id);
-          await updatePreferences(userId, { last_conversation_id: conv.id });
-        } catch (error) {
-          console.error("Failed to create conversation:", error);
-        }
-      }
-    }
-    initializeConversation();
-  }, [conversationId, userId, pillar, industry]);
-
-  const handlePillarChange = async (newPillar: string) => {
-    setPillar(newPillar);
     try {
-      await updatePreferences(userId, { pillar: newPillar });
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: conversationForRequest.map((message) => ({
+            role: message.role,
+            content: message.content,
+          })),
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Request failed with status ${response.status}`);
+      }
+
+      const data = (await response.json()) as { reply?: string };
+      const assistantText = data?.reply?.trim()
+        ? data.reply.trim()
+        : "I'm sorry—something went wrong processing that. Please try again.";
+
+      const assistantMessage: ChatMessage = {
+        id: `assistant-${Date.now()}`,
+        role: "assistant",
+        content: assistantText,
+        createdAt: new Date().toISOString(),
+      };
+
+      setMessages((prev) => [...prev, assistantMessage]);
     } catch (error) {
-      console.error("Failed to update pillar:", error);
+      console.error("Failed to send message:", error);
+      const assistantMessage: ChatMessage = {
+        id: `assistant-error-${Date.now()}`,
+        role: "assistant",
+        content:
+          "I couldn't reach the assistant just now. Please check your connection and try again.",
+        createdAt: new Date().toISOString(),
+      };
+      setMessages((prev) => [...prev, assistantMessage]);
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const handleIndustryChange = async (newIndustry: string) => {
-    setIndustry(newIndustry);
-    try {
-      await updatePreferences(userId, { industry: newIndustry });
-    } catch (error) {
-      console.error("Failed to update industry:", error);
-    }
+  const handleSubmit: FormEventHandler<HTMLFormElement> = (event) => {
+    event.preventDefault();
+    void sendMessage(input);
+  };
+
+  const handleInputChange: ChangeEventHandler<HTMLTextAreaElement> = (event) => {
+    setInput(event.target.value);
+  };
+
+  const handlePathwaySelect = (option: (typeof PATHWAY_OPTIONS)[number]) => {
+    setSelectedPathway(option.id);
+    void sendMessage(option.label);
   };
 
   return (
-    <div className="flex h-screen flex-col">
-      <ChatHeader
-        pillar={pillar}
-        industry={industry}
-        onPillarChange={handlePillarChange}
-        onIndustryChange={handleIndustryChange}
-      />
-      <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-4xl">
-          <MessageList messages={messages} />
-        </div>
-      </div>
-      <ChatComposer
-        input={input}
-        onInputChange={handleInputChange}
-        onSubmit={handleSubmit}
-        isLoading={isLoading}
-      />
+    <div className="flex min-h-screen flex-col bg-gradient-to-b from-purple-50 via-white to-white">
+      <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-8 px-4 py-10 sm:px-6 lg:px-8">
+        <PathwaySelector
+          options={PATHWAY_OPTIONS}
+          selectedPathway={selectedPathway}
+          isBusy={isLoading}
+          onSelect={handlePathwaySelect}
+        />
+        <section className="flex flex-1 flex-col rounded-3xl bg-white shadow-sm ring-1 ring-neutral-200">
+          <div className="flex-1 overflow-y-auto">
+            <MessageList messages={messages} />
+          </div>
+          <ChatComposer
+            input={input}
+            onInputChange={handleInputChange}
+            onSubmit={handleSubmit}
+            isLoading={isLoading}
+          />
+        </section>
+      </main>
     </div>
   );
 }
