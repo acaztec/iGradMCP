@@ -1,64 +1,90 @@
 "use client";
 
-import { useState, useRef, KeyboardEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  type ChangeEvent,
+  type FormEvent,
+  type KeyboardEvent,
+} from "react";
 
 interface ChatComposerProps {
-  onSubmit: (message: string) => void;
+  input: string;
+  onInputChange: (event: ChangeEvent<HTMLTextAreaElement>) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   isLoading: boolean;
 }
 
 export default function ChatComposer({
+  input,
+  onInputChange,
   onSubmit,
   isLoading,
 }: ChatComposerProps) {
-  const [input, setInput] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
 
-  const handleSubmit = () => {
-    if (!input.trim() || isLoading) return;
-    onSubmit(input);
-    setInput("");
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    textarea.style.height = "auto";
+    textarea.style.height = `${textarea.scrollHeight}px`;
+  }, [input]);
+
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    if (!input.trim() || isLoading) {
+      event.preventDefault();
+      return;
+    }
+
+    onSubmit(event);
+
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
     }
   };
 
-  const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSubmit();
+  const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      formRef.current?.requestSubmit();
     }
   };
 
-  const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setInput(e.target.value);
-    e.target.style.height = "auto";
-    e.target.style.height = `${e.target.scrollHeight}px`;
+  const handleChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
+    onInputChange(event);
+    event.target.style.height = "auto";
+    event.target.style.height = `${event.target.scrollHeight}px`;
   };
 
   return (
     <div className="sticky bottom-0 border-t border-neutral-200 bg-white">
       <div className="mx-auto max-w-4xl px-4 py-4">
-        <div className="flex items-end gap-3">
+        <form
+          ref={formRef}
+          onSubmit={handleSubmit}
+          className="flex items-end gap-3"
+        >
           <textarea
             ref={textareaRef}
             value={input}
-            onChange={handleInput}
+            onChange={handleChange}
             onKeyDown={handleKeyDown}
-            placeholder="Ask about lessons, generate content, or get recommendations..."
+            placeholder="Share your answer or ask for more guidance..."
             rows={1}
-            className="flex-1 resize-none rounded-lg border border-neutral-300 bg-white px-4 py-3 text-sm text-neutral-900 placeholder-neutral-500 focus-ring"
+            className="flex-1 resize-none rounded-2xl border border-purple-200 bg-white px-4 py-3 text-sm text-neutral-900 placeholder-neutral-400 focus-ring"
             style={{ maxHeight: "200px" }}
             disabled={isLoading}
+            name="input"
           />
           <button
-            onClick={handleSubmit}
+            type="submit"
             disabled={!input.trim() || isLoading}
-            className="rounded-lg bg-neutral-900 px-6 py-3 text-sm font-medium text-white hover:bg-neutral-800 focus-ring disabled:opacity-50 disabled:cursor-not-allowed"
+            className="rounded-2xl bg-purple-600 px-6 py-3 text-sm font-medium text-white shadow-sm transition hover:bg-purple-700 focus-ring disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isLoading ? "Sending..." : "Send"}
           </button>
-        </div>
+        </form>
       </div>
     </div>
   );

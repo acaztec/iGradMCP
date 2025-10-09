@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import type { Message } from "ai";
+import type { ChatMessage } from "@/types/chat";
 
 interface MessageListProps {
-  messages: Message[];
+  messages: ChatMessage[];
 }
 
 export default function MessageList({ messages }: MessageListProps) {
@@ -13,22 +13,6 @@ export default function MessageList({ messages }: MessageListProps) {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
-
-  if (messages.length === 0) {
-    return (
-      <div className="flex h-full items-center justify-center px-4">
-        <div className="text-center">
-          <h2 className="text-lg font-semibold text-neutral-900">
-            Welcome to Aztec IET Assistant
-          </h2>
-          <p className="mt-2 text-sm text-neutral-600">
-            Ask about lessons, generate contextualized content, or get
-            placement recommendations.
-          </p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-6 px-4 py-6">
