@@ -1,6 +1,6 @@
 # Aztec IET Assistant
 
-This repository hosts a lightweight demo of Aztec's Integrated Education & Training assistant. The experience mirrors the desired scholarship-style interface: learners are greeted by Elevatia, choose from four pathway buttons, and walk through a scripted conversation for the Pharmacy Technician track while the other pathways remain placeholders.
+This repository hosts a lightweight demo of Aztec's Integrated Education & Training assistant. The experience mirrors the desired scholarship-style interface: learners are greeted by Aztec IET, choose from four pathway buttons, and walk through a scripted conversation for the Certified Billing and Coding Specialist (CBCS) track while the other pathways remain placeholders.
 
 ## Architecture Overview
 
@@ -9,7 +9,7 @@ This repository hosts a lightweight demo of Aztec's Integrated Education & Train
 
 ## Key Features
 
-- 🎯 **Guided Pharmacy Technician flow** – Collects diploma status, soft-skill focus, and returns a curated set of lessons and next steps.
+- 🎯 **Guided CBCS flow** – Collects diploma status, soft-skill focus, and returns a curated set of lessons and next steps.
 - 🎨 **Mock-aligned UI** – Hero card, purple-accent buttons, and rounded chat surfaces that match the reference screenshot.
 - 🚀 **Zero external dependencies** – Works out of the box with Node.js and npm; no Supabase, MCP server, or Excel catalog required.
 
@@ -49,4 +49,4 @@ npm run lint -- --max-warnings=0
 
 ---
 
-Built for quick Pharmacy Technician demos while the broader IET experience evolves.
+Built for quick CBCS demos while the broader IET experience evolves.

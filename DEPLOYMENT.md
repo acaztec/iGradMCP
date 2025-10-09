@@ -28,7 +28,7 @@ None are required for this demo. If you extend the app with APIs or databases la
 Click **Deploy**. After the build completes:
 
 - Open the live URL.
-- Select the **Pharmacy Technician** pathway and walk through the prompts.
+- Select the **Certified Billing and Coding Specialist (CBCS)** pathway and walk through the prompts.
 - Confirm you receive the scripted lesson recommendations and next steps.
 
 ## Troubleshooting

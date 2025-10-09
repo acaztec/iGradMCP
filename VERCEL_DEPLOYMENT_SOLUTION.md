@@ -14,7 +14,7 @@ With the catalog and MCP dependencies removed, deployment is straightforward. Us
 2. In Vercel, import the repository and set **Root Directory** to `apps/web`.
 3. Leave the default build settings (`npm install`, `npm run build`).
 4. No environment variables are required for this demo.
-5. Deploy and verify the Pharmacy Technician conversation renders as expected.
+5. Deploy and verify the CBCS conversation renders as expected.
 
 ## Troubleshooting
 

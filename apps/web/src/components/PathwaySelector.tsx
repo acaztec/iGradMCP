@@ -33,7 +33,7 @@ export default function PathwaySelector({
             </div>
             <div>
               <h1 className="text-2xl font-semibold text-purple-900">
-                Hi! I&rsquo;m Elevatia, your AI assistant.
+                Hi! I&rsquo;m Aztec IET, your AI assistant.
               </h1>
               <p className="mt-1 text-sm text-purple-700">
                 I&rsquo;m here to guide you through Integrated Education &amp; Training pathways.

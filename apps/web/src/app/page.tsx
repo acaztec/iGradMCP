@@ -8,15 +8,15 @@ import type { ChatMessage } from "@/types/chat";
 
 const PATHWAY_OPTIONS = [
   {
-    id: "pharmacy-technician",
-    label: "Pharmacy Technician",
-    description: "PTCB-aligned coursework and lab practice for pharmacy teams.",
+    id: "cbcs",
+    label: "Certified Billing and Coding Specialist (CBCS)",
+    description: "Claims processing, coding accuracy, and compliance preparation.",
     status: "available" as const,
   },
   {
-    id: "cbcs",
-    label: "Certified Coding and Billing Specialist (CBCS)",
-    description: "Coding accuracy, claims management, and revenue cycle skills.",
+    id: "pharmacy-technician",
+    label: "Pharmacy Technician",
+    description: "PTCB-aligned coursework and lab practice for pharmacy teams.",
     status: "coming-soon" as const,
   },
   {
