@@ -51,12 +51,12 @@ The site is available at http://localhost:3000.
 
 1. Push your changes to GitHub.
 2. Import the repo into Vercel (root directory `apps/web` is already configured).
-3. Add the environment variables from `.env` to Vercel (OPENAI_API_KEY, optional OPENAI_MODEL override, Supabase keys).
-4. Deploy. Because the Excel file lives in `data/`, Vercel automatically bundles it and the API can read it at runtime—no separate services required.
+3. Add the environment variables from `.env` to Vercel (OPENAI_API_KEY, optional OPENAI_MODEL override, optional CATALOG_PATH override, Supabase keys).
+4. Deploy. The Next.js build now traces the Excel spreadsheet explicitly, so the serverless function always ships with `data/Samples for AI prototype.xlsx` (or the path provided via `CATALOG_PATH`).
 
 ## Troubleshooting
 
-- **Catalog not found** – Check that `data/Samples for AI prototype.xlsx` is present in the repository. The API logs an error if it cannot resolve the path.
+- **Catalog not found** – Check that `data/Samples for AI prototype.xlsx` is present in the repository (or update `CATALOG_PATH` if you host it elsewhere). The API logs an error if it cannot resolve the path.
 - **Model unavailable** – The API gracefully falls back to `gpt-4o-mini` if a custom `OPENAI_MODEL` is missing. Update the env var or remove it to use the default.
 - **Empty recommendations** – When the spreadsheet search returns no matches, the assistant now states that explicitly rather than guessing. Confirm the query wording or update the catalog data.
 

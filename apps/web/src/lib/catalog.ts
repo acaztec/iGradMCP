@@ -24,14 +24,37 @@ const CATALOG_FILENAME = "Samples for AI prototype.xlsx";
 let cachedCatalog: CatalogData | null = null;
 
 function resolveCatalogPath(): string {
-  const searchRoots = [
-    process.cwd(),
-    path.resolve(process.cwd(), ".."),
-    path.resolve(process.cwd(), "../.."),
-  ];
+  const explicitPath = process.env.CATALOG_PATH;
 
-  for (const root of searchRoots) {
-    const candidate = path.join(root, "data", CATALOG_FILENAME);
+  if (explicitPath) {
+    const normalizedExplicitPath = path.isAbsolute(explicitPath)
+      ? explicitPath
+      : path.resolve(explicitPath);
+
+    if (fs.existsSync(normalizedExplicitPath)) {
+      return normalizedExplicitPath;
+    }
+
+    console.warn(
+      `CATALOG_PATH was set to "${explicitPath}" but no file was found. Falling back to directory search.`
+    );
+  }
+
+  const candidateDirs = new Set<string>();
+  const cwd = process.cwd();
+
+  candidateDirs.add(path.resolve(cwd, "data"));
+  candidateDirs.add(path.resolve(cwd, "../data"));
+  candidateDirs.add(path.resolve(cwd, "../../data"));
+
+  let currentDir = __dirname;
+  for (let i = 0; i < 10; i += 1) {
+    candidateDirs.add(path.resolve(currentDir, "data"));
+    currentDir = path.dirname(currentDir);
+  }
+
+  for (const dir of candidateDirs) {
+    const candidate = path.join(dir, CATALOG_FILENAME);
     if (fs.existsSync(candidate)) {
       return candidate;
     }
@@ -39,7 +62,7 @@ function resolveCatalogPath(): string {
 
   throw new Error(
     `Could not locate curriculum catalog at ${CATALOG_FILENAME}. ` +
-      "Ensure the data directory is available during runtime."
+      "Ensure the data directory is available during runtime or provide an absolute path via the CATALOG_PATH environment variable."
   );
 }
 

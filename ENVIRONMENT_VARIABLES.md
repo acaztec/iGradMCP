@@ -38,7 +38,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbG...your_actual_anon_key...
 
 ---
 
-### Optional Variables (Model Selection)
+### Optional Variables (Model & Catalog Overrides)
 
 #### 3. OpenAI Model (optional)
 
@@ -48,6 +48,15 @@ OPENAI_MODEL=gpt-4o-mini
 ```
 
 Use this if your OpenAI account has access to a specific model (for example, `gpt-4.1` or an enterprise model). If the provided model is unavailable at runtime, the app automatically falls back to `gpt-4o-mini` so end users can continue chatting.
+
+#### 4. Catalog Path Override (optional)
+
+```
+# Only needed if you store the spreadsheet in a custom location
+CATALOG_PATH=/var/task/data/Samples for AI prototype.xlsx
+```
+
+By default the chat API automatically searches for `data/Samples for AI prototype.xlsx` relative to the deployed project. Set `CATALOG_PATH` to an absolute or relative path if you keep the spreadsheet elsewhere or inject it at runtime.
 
 ### Built-in Catalog Data
 
@@ -93,6 +102,7 @@ The Aztec curriculum spreadsheet (`data/Samples for AI prototype.xlsx`) ships wi
 ```
 OPENAI_API_KEY=sk-proj-YOUR_KEY_HERE
 OPENAI_MODEL=gpt-4o-mini
+CATALOG_PATH=optional/custom/path.xlsx
 NEXT_PUBLIC_SUPABASE_URL=https://nqfrgrkamvrkoyssgtbx.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=YOUR_ANON_KEY_HERE
 ```
@@ -114,6 +124,7 @@ cp .env.example .env
 ```
 OPENAI_API_KEY=sk-proj-YOUR_KEY_HERE
 OPENAI_MODEL=gpt-4o-mini
+CATALOG_PATH=optional/custom/path.xlsx
 NEXT_PUBLIC_SUPABASE_URL=https://nqfrgrkamvrkoyssgtbx.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=YOUR_ANON_KEY_HERE
 ```
