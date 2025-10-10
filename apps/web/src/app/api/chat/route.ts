@@ -89,7 +89,6 @@ type PlanBlueprint = {
   certificationIntroLine: string;
   examTopicLines: string[];
   knowledgeAssessmentLine: string;
-  sampleQuestionBlocks: string[];
   recommendedLessonLines: string[];
 };
 
@@ -181,8 +180,14 @@ const GED_MATH_ASSESSMENT_PROMPT = [
 const GED_READINESS_PROMPT =
   "How would you rate your readiness to take a high-school equivalency (HSE) exam?\n• I’m not ready. I would need to start with basic academic skills and work my way up to intermediate skills and then high-school skills.\n• I’m somewhat ready. I would need to start with intermediate academic skills and work my way up to high-school level skills.\n• I’m ready, but I would like a refresher of high-school level academic skills.";
 
-const GED_SUBJECTS_PROMPT =
-  "Which subject area(s) do you feel you need to work on? Select all that apply.\n• Math\n• Reading\n• Language Mechanics\n• Writing";
+const GED_SUBJECTS_PROMPT = [
+  "Which subject area(s) do you feel you need to work on?",
+  "Select all that apply.",
+  "• Math",
+  "• Reading",
+  "• Language Mechanics",
+  "• Writing",
+].join("\n");
 
 const CORE_CBCS_LESSONS = [
   "Certification",
@@ -265,8 +270,8 @@ Conversation guardrails:
 
 Final plan formatting rules:
 1. Open with the sentence: "Thanks for sharing those details! Here's the Aztec IET guidance for the Certified Billing and Coding Specialist (CBCS) pathway:" on its own line.
-2. Include sections titled "Eligibility", "Digital Literacy", "Soft Skill Focus", "Certification Prep Focus", "CBCS Knowledge Assessment", "Sample questions to guide your study", and "Recommended Lessons". Render each section title as a level-3 Markdown heading and separate sections with a blank line.
-3. Under "Certification Prep Focus" list the four CBCS domains exactly as provided. Under "CBCS Knowledge Assessment" include the provided practice quiz line. Under "Sample questions to guide your study" include each sample question prompt and answer options exactly as provided.
+2. Include sections titled "Eligibility", "Digital Literacy", "Soft Skill Focus", "Certification Prep Focus", "CBCS Knowledge Assessment", and "Recommended Lessons". Render each section title as a level-3 Markdown heading and separate sections with a blank line.
+3. Under "Certification Prep Focus" list the four CBCS domains exactly as provided. Under "CBCS Knowledge Assessment" include the provided practice quiz line, but do not restate the individual assessment questions in the final plan.
 4. Use the supplied guidance notes verbatim whenever they are provided (for example, digital literacy lines, soft skill suggestions, and recommended lessons). You may adjust sentence flow for readability but do not alter the meaning.
 5. Maintain a supportive, professional voice that thanks the learner, summarizes their needs, and calls out next steps.
 
@@ -816,12 +821,6 @@ function buildPlanBlueprint(inputs: PlanInputs): PlanBlueprint {
 
   const examTopicLines = EXAM_TOPICS.map((topic) => `- ${topic}`);
   const knowledgeAssessmentLine = `- ${KNOWLEDGE_ASSESSMENT_INTRO}`;
-  const sampleQuestionBlocks = SAMPLE_QUESTIONS.map((question) => {
-    const optionLines = question.options
-      .map((option, index) => `${String.fromCharCode(65 + index)}) ${option}`)
-      .join("\n");
-    return `${question.prompt}\n${optionLines}`;
-  });
   const recommendedLessonLines = getRecommendedLessonLines(
     spreadsheetComfort,
     digitalLessons,
@@ -836,7 +835,6 @@ function buildPlanBlueprint(inputs: PlanInputs): PlanBlueprint {
     certificationIntroLine,
     examTopicLines,
     knowledgeAssessmentLine,
-    sampleQuestionBlocks,
     recommendedLessonLines,
   };
 }
@@ -850,7 +848,6 @@ function buildStaticPlan(inputs: PlanInputs): string {
     ...blueprint.examTopicLines,
   ].join("\n");
 
-  const sampleQuestionContent = blueprint.sampleQuestionBlocks.join("\n\n");
   const recommendedLessonContent = blueprint.recommendedLessonLines.join("\n");
 
   return [
@@ -860,7 +857,6 @@ function buildStaticPlan(inputs: PlanInputs): string {
     `### Soft Skill Focus\n${softSkillContent}`,
     `### Certification Prep Focus\n${certificationContent}`,
     `### CBCS Knowledge Assessment\n${blueprint.knowledgeAssessmentLine}`,
-    `### Sample questions to guide your study\n${sampleQuestionContent}`,
     `### Recommended Lessons\n${recommendedLessonContent}`,
   ].join("\n\n");
 }
@@ -964,7 +960,6 @@ async function generateCbcsPlan(
       ...blueprint.examTopicLines,
     ].join("\n")}`,
     `CBCS knowledge assessment bullet:\n${blueprint.knowledgeAssessmentLine}`,
-    `Sample questions (prompt followed by options):\n${blueprint.sampleQuestionBlocks.join("\n\n")}`,
     `Recommended lessons:\n${blueprint.recommendedLessonLines.join("\n")}`,
   ].join("\n\n");
 
@@ -1001,17 +996,17 @@ async function getAssistantReply(messages: ChatMessage[]): Promise<string> {
     .map((message) => message.content);
 
   if (userMessages.length === 0) {
-    return "Hi there! Choose one of the pathway buttons to get started, or tell me which certification you want to explore.";
+    return "Hello and welcome! I’m excited to help you map out your Certified Billing and Coding Specialist journey. Tap one of the pathway buttons to get started, or let me know which certification you’re curious about.";
   }
 
   const { pathway, index: pathwayIndex } = getFirstPathwayChoice(userMessages);
 
   if (!pathway) {
-    return "I didn't catch which pathway you want to explore. Tap one of the pathway buttons above—CBCS, Pharmacy Technician, CCMA, or CMAA—to continue.";
+    return "I didn’t quite catch which pathway you’d like to explore. Try tapping one of the pathway buttons above—CBCS is ready now, and the others are coming soon.";
   }
 
   if (pathway.id !== "cbcs") {
-    return `${pathway.label} guidance is coming soon in this demo. For now, pick "Certified Billing and Coding Specialist (CBCS)" to walk through the scripted experience.`;
+    return `Thanks for your interest in the ${pathway.label}! That guidance is coming soon in this demo. For now, choose "Certified Billing and Coding Specialist (CBCS)" so I can walk you through the full experience.`;
   }
 
   const diplomaResult = findParsedResponse(
@@ -1047,7 +1042,7 @@ async function getAssistantReply(messages: ChatMessage[]): Promise<string> {
     const gedReadinessValue = gedReadinessResult.value;
 
     if (!gedReadinessValue) {
-      return "Take a moment to pick the option that best matches your GED readiness so I can recommend the right lessons.\n• I’m not ready. I would need to start with basic academic skills and work my way up to intermediate skills and then high-school skills.\n• I’m somewhat ready. I would need to start with intermediate academic skills and work my way up to high-school level skills.\n• I’m ready, but I would like a refresher of high-school level academic skills.";
+      return "Could you pick the option that best matches your GED readiness so I can recommend the right lessons?\n• I’m not ready. I would need to start with basic academic skills and work my way up to intermediate skills and then high-school skills.\n• I’m somewhat ready. I would need to start with intermediate academic skills and work my way up to high-school level skills.\n• I’m ready, but I would like a refresher of high-school level academic skills.";
     }
 
     gedSubjectsResult = findParsedResponse(
@@ -1063,7 +1058,14 @@ async function getAssistantReply(messages: ChatMessage[]): Promise<string> {
     const gedSubjectsValue = gedSubjectsResult.value;
 
     if (!gedSubjectsValue || gedSubjectsValue.length === 0) {
-      return "Let me know which GED subject areas you want to focus on so I can share the right practice set.\n• Math\n• Reading\n• Language Mechanics\n• Writing";
+      return [
+        "Which GED subject areas should we focus on right now?",
+        "Select all that apply.",
+        "• Math",
+        "• Reading",
+        "• Language Mechanics",
+        "• Writing",
+      ].join("\n");
     }
   }
 
@@ -1116,7 +1118,7 @@ async function getAssistantReply(messages: ChatMessage[]): Promise<string> {
   const communication = communicationResult.value;
 
   if (!communication) {
-    return "Please let me know which option fits your communication skills.\n• I have good communication skills.\n• I could use some suggestions for improving communication skills.\n• I’m not sure what communication skills are.";
+    return "Please let me know which option fits your communication skills best?\n• I have good communication skills.\n• I could use some suggestions for improving communication skills.\n• I’m not sure what communication skills are.";
   }
 
   const teamworkResult = findParsedResponse(
@@ -1132,7 +1134,7 @@ async function getAssistantReply(messages: ChatMessage[]): Promise<string> {
   const teamwork = teamworkResult.value;
 
   if (!teamwork) {
-    return "Please choose the option that best describes how you work with others.\n• I work well with others and feel confident in my skills in this area.\n• I could use some suggestions for improving how I work with others.\n• I’m not sure what skills are related to working well with others.";
+    return "Please choose the option that best describes how you work with others?\n• I work well with others and feel confident in my skills in this area.\n• I could use some suggestions for improving how I work with others.\n• I’m not sure what skills are related to working well with others.";
   }
 
   const answers: AnswerSummary = {

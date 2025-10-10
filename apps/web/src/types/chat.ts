@@ -8,5 +8,7 @@ export interface ChatMessage {
   quickReplies?: {
     question: string;
     options: string[];
+    selectionMode?: "single" | "multiple";
+    helperText?: string | null;
   } | null;
 }
