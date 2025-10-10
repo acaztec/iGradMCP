@@ -17,7 +17,7 @@ This repository hosts a lightweight demo of Aztec's Integrated Education & Train
 
 - Node.js 18+
 - npm 9+
-- An OpenAI API key with access to `gpt-4o-mini` (configurable via `OPENAI_MODEL`).
+- An OpenAI API key with access to `gpt-4o` (configurable via `OPENAI_MODEL`).
 
 ## Setup
 

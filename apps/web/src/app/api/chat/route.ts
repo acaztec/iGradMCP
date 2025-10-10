@@ -1,3 +1,5 @@
+import { formatLessonCatalog } from "@/data/lessons";
+
 const PATHWAYS = [
   {
     id: "cbcs",
@@ -57,6 +59,7 @@ type AnswerSummary = {
   timeManagement: string;
   communication: string;
   teamwork: string;
+  gedSupport?: string;
 };
 
 type PersonalizedFollowUp = {
@@ -70,6 +73,7 @@ type PlanInputs = {
   timeManagement: SkillConfidence;
   communication: SkillConfidence;
   teamwork: SkillConfidence;
+  gedSupportResponse: string | null;
 };
 
 type PersonalizedQuestionEntry = {
@@ -83,6 +87,12 @@ type PersonalizedQuestionState = {
   questions: PersonalizedQuestionEntry[];
   answers: Map<number, { content: string; index: number }>;
   pendingQuestionNumber: number | null;
+};
+
+type GedSupportState = {
+  asked: boolean;
+  promptIndex: number;
+  answer: { content: string; index: number } | null;
 };
 
 type PlanBlueprint = {
@@ -145,6 +155,115 @@ const SAMPLE_QUESTIONS = [
   },
 ];
 
+const GED_SUPPORT_QUESTION =
+  "Thanks for letting me know. What's been the hardest part of earning your GED or high-school equivalency so far?";
+
+const GED_SUPPORT_REMINDER =
+  "Whenever you're ready, let me know what feels most challenging about earning your GED or high-school equivalency so I can match the right lessons.";
+
+const GED_SUPPORT_PROMPTS = [GED_SUPPORT_QUESTION, GED_SUPPORT_REMINDER];
+
+const CORE_CBCS_LESSONS = [
+  "Certification",
+  "Revenue Cycle",
+  "Regulatory Compliance",
+  "Medical Terminology",
+  "Medical Coding Sets",
+  "Billing and Reimbursement",
+];
+
+const DIGITAL_EXCEL_LESSON =
+  "Using Technology to Present Information: Microsoft Excel";
+const DIGITAL_COMPUTER_SKILLS_LESSON = "Developing Computer Skills";
+const DIGITAL_GOOGLE_DOC_LESSON =
+  "Using Technology to Present Information: Google Doc";
+
+const TIME_MANAGEMENT_LESSONS = [
+  "Time Management",
+  "Effective Work Techniques",
+];
+const COMMUNICATION_LESSONS = ["Listening Skills", "Effective Speaking"];
+const TEAMWORK_LESSONS = ["Teamwork", "Dealing with Supervisors"];
+const SOFT_SKILL_CONFIDENT_LESSON = "Positive Thinking";
+
+type GedKeywordEntry = {
+  focus: string;
+  keywords: RegExp[];
+  lessons: string[];
+};
+
+const GED_KEYWORD_ENTRIES: GedKeywordEntry[] = [
+  {
+    focus: "math skills",
+    keywords: [
+      /math/,
+      /algebra/,
+      /fraction/,
+      /decimal/,
+      /geometry/,
+      /equation/,
+      /number/,
+      /measurement/,
+    ],
+    lessons: [
+      "Introduction to Math Problem Solving",
+      "Understanding Algebra",
+      "Adding and Subtracting Fractions",
+      "Multiplying and Dividing Decimals",
+      "Geometry Basics",
+    ],
+  },
+  {
+    focus: "reading comprehension",
+    keywords: [/read/, /comprehension/, /story/, /text/, /literature/, /nonfiction/],
+    lessons: [
+      "Reading for Facts",
+      "Inferences in Reading",
+      "Reading Nonfiction",
+      "Drawing Conclusions in Reading",
+    ],
+  },
+  {
+    focus: "writing and grammar",
+    keywords: [/write/, /writing/, /essay/, /grammar/, /punctuation/, /sentence/],
+    lessons: [
+      "Writing an Essay",
+      "Creating an Outline",
+      "Capitalization and Punctuation",
+      "Common Writing Issues",
+    ],
+  },
+  {
+    focus: "science vocabulary",
+    keywords: [/science/, /scientific/, /biology/, /chemistry/],
+    lessons: ["Words to Know:  Science", "Understanding Graphs"],
+  },
+  {
+    focus: "social studies vocabulary",
+    keywords: [/social studies/, /history/, /civics/, /government/],
+    lessons: [
+      "Words to Know:  Social Studies",
+      "Reading Historical Documents",
+    ],
+  },
+  {
+    focus: "study skills",
+    keywords: [/study/, /studying/, /focus/, /motivation/, /test/, /exam/],
+    lessons: [
+      "Making the Transition to Career and College Readiness",
+      "Understanding Actions and Results",
+      "Locating Information",
+    ],
+  },
+];
+
+const GED_FALLBACK_LESSONS = [
+  "Making the Transition to Career and College Readiness",
+  "Reading for Facts",
+  "Understanding Algebra",
+  "Locating Information",
+];
+
 const PLAN_OPENING_LINE =
   "Thanks for sharing those details! Here's the Aztec IET guidance for the Certified Billing and Coding Specialist (CBCS) pathway:";
 
@@ -169,7 +288,7 @@ Follow these formatting rules exactly:
 7. Ensure the full response is valid Markdown, using bullet lists and line breaks exactly as supplied in the guidance notes.`;
 
 const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1";
-const OPENAI_MODEL = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
+const OPENAI_MODEL = process.env.OPENAI_MODEL ?? "gpt-4o";
 
 function normalizeText(value: string): string {
   return value.replace(/\s+/g, " ").trim().toLowerCase();
@@ -356,6 +475,148 @@ function findParsedResponse<T>(
   }
 
   return { entry: lastEntry, value: null } as const;
+}
+
+function extractGedSupportState(messages: ChatMessage[]): GedSupportState {
+  let promptIndex = -1;
+
+  for (let index = 0; index < messages.length; index += 1) {
+    const message = messages[index];
+
+    if (message.role !== "assistant") {
+      continue;
+    }
+
+    const trimmed = message.content.trim();
+
+    if (
+      trimmed.length > 0 &&
+      GED_SUPPORT_PROMPTS.some((prompt) => trimmed.includes(prompt))
+    ) {
+      promptIndex = index;
+    }
+  }
+
+  if (promptIndex === -1) {
+    return { asked: false, promptIndex: -1, answer: null };
+  }
+
+  for (let index = promptIndex + 1; index < messages.length; index += 1) {
+    const message = messages[index];
+
+    if (message.role !== "user") {
+      continue;
+    }
+
+    const trimmed = message.content.trim();
+
+    if (trimmed.length === 0) {
+      continue;
+    }
+
+    return {
+      asked: true,
+      promptIndex,
+      answer: { content: trimmed, index },
+    };
+  }
+
+  return { asked: true, promptIndex, answer: null };
+}
+
+function selectAcademicSupport(response: string | null): {
+  lessons: string[];
+  focusHint: string | null;
+} {
+  if (!response) {
+    return { lessons: GED_FALLBACK_LESSONS, focusHint: null };
+  }
+
+  const normalized = response.toLowerCase();
+  const selections = new Set<string>();
+  let focusHint: string | null = null;
+
+  for (const entry of GED_KEYWORD_ENTRIES) {
+    if (entry.keywords.some((pattern) => pattern.test(normalized))) {
+      entry.lessons.forEach((lesson) => selections.add(lesson));
+
+      if (!focusHint) {
+        focusHint = entry.focus;
+      }
+    }
+  }
+
+  if (selections.size === 0) {
+    GED_FALLBACK_LESSONS.forEach((lesson) => selections.add(lesson));
+  }
+
+  return {
+    lessons: Array.from(selections).slice(0, 6),
+    focusHint,
+  };
+}
+
+function selectDigitalLessons(spreadsheetComfort: SpreadsheetComfort): string[] {
+  if (spreadsheetComfort === "novice") {
+    return [
+      DIGITAL_COMPUTER_SKILLS_LESSON,
+      DIGITAL_EXCEL_LESSON,
+      DIGITAL_GOOGLE_DOC_LESSON,
+    ];
+  }
+
+  if (spreadsheetComfort === "familiar") {
+    return [DIGITAL_EXCEL_LESSON, DIGITAL_GOOGLE_DOC_LESSON];
+  }
+
+  return [DIGITAL_EXCEL_LESSON];
+}
+
+function selectSoftSkillLessons(
+  timeManagement: SkillConfidence,
+  communication: SkillConfidence,
+  teamwork: SkillConfidence
+): string[] {
+  const selections = new Set<string>();
+
+  if (timeManagement === "needs-support") {
+    TIME_MANAGEMENT_LESSONS.forEach((lesson) => selections.add(lesson));
+  } else if (timeManagement === "unsure") {
+    selections.add(TIME_MANAGEMENT_LESSONS[0]!);
+  }
+
+  if (communication === "needs-support") {
+    COMMUNICATION_LESSONS.forEach((lesson) => selections.add(lesson));
+  } else if (communication === "unsure") {
+    selections.add(COMMUNICATION_LESSONS[0]!);
+  }
+
+  if (teamwork === "needs-support") {
+    TEAMWORK_LESSONS.forEach((lesson) => selections.add(lesson));
+  } else if (teamwork === "unsure") {
+    selections.add(TEAMWORK_LESSONS[0]!);
+  }
+
+  if (selections.size === 0) {
+    selections.add(SOFT_SKILL_CONFIDENT_LESSON);
+  }
+
+  return Array.from(selections);
+}
+
+function formatLessonGroup(label: string, lessons: string[]): string | null {
+  const uniqueLessons = Array.from(new Set(lessons));
+
+  if (uniqueLessons.length === 0) {
+    return null;
+  }
+
+  const lessonLines = uniqueLessons
+    .slice(0, 6)
+    .map((lesson) => `Lesson: ${lesson}`)
+    .join("\n  ");
+
+  return `- ${label}\n  ${lessonLines}`;
 }
 
 const PERSONALIZED_QUESTION_INTROS = [
@@ -614,82 +875,139 @@ function formatSoftSkillRecommendations(
 
   if (timeManagement === "needs-support") {
     suggestions.push(
-      "Explore productivity strategies like time blocking and use Aztec's planning templates to track certification tasks."
+      "Use the \"Time Management\" and \"Effective Work Techniques\" lessons to build a repeatable schedule for processing claims and exam prep tasks."
     );
   } else if (timeManagement === "unsure") {
     suggestions.push(
-      "Review the time-management overview to learn how prioritizing tasks keeps claim submissions on schedule."
+      "Review the \"Time Management\" lesson to learn scheduling habits that keep claim submissions on track."
     );
   }
 
   if (communication === "needs-support") {
     suggestions.push(
-      "Practice patient-friendly explanations of billing terms and role-play calls with payers to build confidence."
+      "Practice with the \"Listening Skills\" and \"Effective Speaking\" lessons to translate payer language into learner-friendly updates."
     );
   } else if (communication === "unsure") {
     suggestions.push(
-      "Take the communication fundamentals mini-lesson to learn the vocabulary that keeps documentation clear."
+      "Explore the \"Listening Skills\" lesson to stay confident when explaining billing steps."
     );
   }
 
   if (teamwork === "needs-support") {
     suggestions.push(
-      "Use collaboration checklists to stay aligned with providers, coders, and revenue-cycle teammates."
+      "Work through the \"Teamwork\" and \"Dealing with Supervisors\" lessons to strengthen collaboration across the revenue-cycle team."
     );
   } else if (teamwork === "unsure") {
     suggestions.push(
-      "Review examples of interdepartmental workflows so you know who to loop in during claim follow-up."
+      "Start with the \"Teamwork\" lesson to see how coders, billers, and providers stay aligned."
     );
   }
 
   if (suggestions.length === 0) {
     suggestions.push(
-      "Keep applying your professional strengths—log weekly wins so you can show how you collaborate, communicate, and stay on track."
+      "Keep applying your strengths—use \"Positive Thinking\" to celebrate wins with your team each week."
     );
   }
 
   return suggestions;
 }
 
-function getEligibilityLine(hasDiploma: boolean): string {
-  return hasDiploma
-    ? "- You already meet the high school requirement—great work checking that box."
-    : "- Plan time to finish your high-school equivalency (GED/HiSET) so you can sit for the CBCS exam.";
+function getEligibilityLine(
+  hasDiploma: boolean,
+  focusHint: string | null
+): string {
+  if (hasDiploma) {
+    return "- You already meet the high school requirement—great work checking that box.";
+  }
+
+  if (focusHint) {
+    return `- Plan time to finish your high-school equivalency (GED/HiSET) so you can sit for the CBCS exam. We'll target your ${focusHint} with GED lessons in the plan below.`;
+  }
+
+  return "- Plan time to finish your high-school equivalency (GED/HiSET) so you can sit for the CBCS exam. Let me know which GED topics feel toughest so I can match lessons.";
 }
 
-function getDigitalLiteracyLine(spreadsheetComfort: SpreadsheetComfort): string {
-  if (spreadsheetComfort === "familiar") {
-    return "- Build confidence with Excel formatting, formulas, and filtering so you can track denials and appeals efficiently.";
-  }
+function getDigitalLiteracyLine(
+  spreadsheetComfort: SpreadsheetComfort,
+  digitalLessons: string[]
+): string {
+  const highlightedLessons = digitalLessons
+    .slice(0, 2)
+    .map((lesson) => `\"${lesson}\"`)
+    .join(" and ");
 
   if (spreadsheetComfort === "novice") {
-    return "- Start with the Digital Literacy lesson \"Using Technology to Present Information: Microsoft Excel\" to learn spreadsheets from the ground up.";
+    return `- Start with ${highlightedLessons} to learn spreadsheet basics for tracking denials, payments, and study checkpoints.`;
   }
 
-  return "- Keep practicing spreadsheet workflows to manage claims, denials, and study notes.";
+  if (spreadsheetComfort === "familiar") {
+    return `- Use ${highlightedLessons} to sharpen spreadsheet formulas and filtering for claim follow-up.`;
+  }
+
+  return "- Keep practicing spreadsheet workflows to manage claims, denials, and study notes—your Excel skills are a real asset.";
 }
 
 function getRecommendedLessonLines(
-  spreadsheetComfort: SpreadsheetComfort
+  spreadsheetComfort: SpreadsheetComfort,
+  digitalLessons: string[],
+  softSkillLessons: string[],
+  academicSupport: { lessons: string[] } | null
 ): string[] {
-  const lessons = [
-    "Certified Billing and Coding Specialist (CBCS)\n  Lesson: Regulatory Compliance\n  Lesson: Anatomy and Physiology: Part 1\n  Lesson: Anatomy and Physiology: Part 2\n  Lesson: Anatomy and Physiology: Part 3\n  Lesson: Medical Coding Sets",
-  ];
+  const lines: (string | null)[] = [];
 
-  if (spreadsheetComfort !== "expert") {
-    lessons.unshift(
-      "Digital Literacy\n  Lesson: Using Technology to Present Information: Microsoft Excel"
+  lines.push(formatLessonGroup("CBCS Certification Prep", CORE_CBCS_LESSONS));
+
+  lines.push(
+    formatLessonGroup(
+      spreadsheetComfort === "expert"
+        ? "Keep Spreadsheet Momentum"
+        : "Digital Literacy Boost",
+      digitalLessons
+    )
+  );
+
+  lines.push(formatLessonGroup("Soft Skills Practice", softSkillLessons));
+
+  if (academicSupport) {
+    lines.push(
+      formatLessonGroup(
+        "Academic Skills for GED Prep",
+        academicSupport.lessons
+      )
     );
   }
 
-  return lessons.map((lesson) => `- ${lesson}`);
+  return lines.filter((line): line is string => Boolean(line));
 }
 
 function buildPlanBlueprint(inputs: PlanInputs): PlanBlueprint {
-  const { hasDiploma, spreadsheetComfort, timeManagement, communication, teamwork } = inputs;
+  const {
+    hasDiploma,
+    spreadsheetComfort,
+    timeManagement,
+    communication,
+    teamwork,
+    gedSupportResponse,
+  } = inputs;
 
-  const eligibilityLine = getEligibilityLine(hasDiploma);
-  const digitalLiteracyLine = getDigitalLiteracyLine(spreadsheetComfort);
+  const academicSupport = hasDiploma
+    ? null
+    : selectAcademicSupport(gedSupportResponse);
+  const digitalLessons = selectDigitalLessons(spreadsheetComfort);
+  const softSkillLessons = selectSoftSkillLessons(
+    timeManagement,
+    communication,
+    teamwork
+  );
+
+  const eligibilityLine = getEligibilityLine(
+    hasDiploma,
+    academicSupport?.focusHint ?? null
+  );
+  const digitalLiteracyLine = getDigitalLiteracyLine(
+    spreadsheetComfort,
+    digitalLessons
+  );
   const softSkillLines = formatSoftSkillRecommendations(
     timeManagement,
     communication,
@@ -707,7 +1025,12 @@ function buildPlanBlueprint(inputs: PlanInputs): PlanBlueprint {
       .join("\n");
     return `${question.prompt}\n${optionLines}`;
   });
-  const recommendedLessonLines = getRecommendedLessonLines(spreadsheetComfort);
+  const recommendedLessonLines = getRecommendedLessonLines(
+    spreadsheetComfort,
+    digitalLessons,
+    softSkillLessons,
+    academicSupport
+  );
 
   return {
     eligibilityLine,
@@ -788,22 +1111,41 @@ async function generateCbcsPlan(
 ): Promise<string> {
   const blueprint = buildPlanBlueprint(inputs);
   const { answers, followUps } = inputs;
+  const lessonCatalog = formatLessonCatalog();
 
-  const answerSummary = [
+  const answerSummaryLines = [
     `1. Do you have a high-school diploma or high-school equivalency?\n   Answer: ${answers.diploma}`,
     `2. How comfortable are you working with spreadsheets?\n   Answer: ${answers.spreadsheet}`,
     `3. How do you feel about your time-management skills?\n   Answer: ${answers.timeManagement}`,
     `4. How do you feel about your communication skills?\n   Answer: ${answers.communication}`,
     `5. How do you feel about your ability to work with others?\n   Answer: ${answers.teamwork}`,
-  ].join("\n");
+  ];
 
-  const normalizedInterpretation = [
+  if (!inputs.hasDiploma && answers.gedSupport) {
+    answerSummaryLines.push(
+      `6. What feels hardest about finishing your GED or high-school equivalency?\n   Answer: ${answers.gedSupport}`
+    );
+  }
+
+  const answerSummary = answerSummaryLines.join("\n");
+
+  const normalizedInterpretationLines = [
     `- Diploma requirement met: ${inputs.hasDiploma ? "Yes" : "No"}`,
     `- Spreadsheet comfort level: ${inputs.spreadsheetComfort}`,
     `- Time-management confidence: ${inputs.timeManagement}`,
     `- Communication confidence: ${inputs.communication}`,
     `- Teamwork confidence: ${inputs.teamwork}`,
-  ].join("\n");
+  ];
+
+  if (!inputs.hasDiploma) {
+    normalizedInterpretationLines.push(
+      `- GED support focus: ${
+        answers.gedSupport ?? "Learner will share more details."
+      }`
+    );
+  }
+
+  const normalizedInterpretation = normalizedInterpretationLines.join("\n");
 
   const followUpSummary = followUps.length
     ? followUps
@@ -833,6 +1175,9 @@ async function generateCbcsPlan(
     "",
     "Normalized interpretation of the learner's readiness:",
     normalizedInterpretation,
+    "",
+    "Lesson catalog to pull from when recommending academic, soft skill, and CBCS resources:",
+    lessonCatalog,
     "",
     "Use the following guidance notes exactly as written when drafting your response (they already reflect the correct phrasing):",
     guidanceNotes,
@@ -887,6 +1232,18 @@ async function getAssistantReply(messages: ChatMessage[]): Promise<string> {
 
   if (hasDiploma === null) {
     return "Just a quick check—do you currently have a high-school diploma or high-school equivalency (GED/HiSET)?\n• Yes\n• No";
+  }
+
+  const gedSupportState = extractGedSupportState(messages);
+
+  if (!hasDiploma) {
+    if (!gedSupportState.asked) {
+      return GED_SUPPORT_QUESTION;
+    }
+
+    if (!gedSupportState.answer) {
+      return GED_SUPPORT_REMINDER;
+    }
   }
 
   const spreadsheetResult = findParsedResponse(
@@ -965,6 +1322,10 @@ async function getAssistantReply(messages: ChatMessage[]): Promise<string> {
     teamwork: extractLatestAnswer(teamworkResult.entry.content),
   };
 
+  if (!hasDiploma && gedSupportState.answer) {
+    answers.gedSupport = gedSupportState.answer.content;
+  }
+
   const personalizedState = extractPersonalizedQuestionState(messages);
 
   if (personalizedState.planDelivered) {
@@ -1017,12 +1378,17 @@ async function getAssistantReply(messages: ChatMessage[]): Promise<string> {
     }
   }
 
+  const gedSupportResponse = !hasDiploma
+    ? gedSupportState.answer?.content ?? null
+    : null;
+
   return await generateCbcsPlan({
     hasDiploma,
     spreadsheetComfort,
     timeManagement,
     communication,
     teamwork,
+    gedSupportResponse,
     answers,
     followUps: answeredFollowUps.slice(0, 3),
   });
