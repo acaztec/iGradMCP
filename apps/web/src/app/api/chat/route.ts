@@ -1173,14 +1173,19 @@ async function getAssistantReply(messages: ChatMessage[]): Promise<string> {
       return CBCS_ASSESSMENT_PROMPT;
     }
   } else if (gedSubjects.length > 0) {
-    const assessmentPrompt = buildGedAssessmentPrompt(gedSubjects);
-    const assessmentIndex = findAssistantMessageIndex(
-      messages,
-      assessmentPrompt
-    );
+    if (gedSubjects.includes("math")) {
+      const assessmentPrompt = buildGedAssessmentPrompt(gedSubjects);
+      const assessmentIndex = findAssistantMessageIndex(
+        messages,
+        assessmentPrompt
+      );
 
-    if (assessmentIndex === -1 || !hasUserReplyAfterIndex(messages, assessmentIndex)) {
-      return assessmentPrompt;
+      if (
+        assessmentIndex === -1 ||
+        !hasUserReplyAfterIndex(messages, assessmentIndex)
+      ) {
+        return assessmentPrompt;
+      }
     }
   }
 
