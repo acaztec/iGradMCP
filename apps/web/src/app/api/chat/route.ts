@@ -357,35 +357,91 @@ function findParsedResponse<T>(
   return { entry: lastEntry, value: null } as const;
 }
 
+const PERSONALIZED_QUESTION_INTROS = [
+  "Thanks for sharing those readiness insights! I have a few personalized questions to tailor your CBCS study plan.",
+  "Great details so far—let's build on them with another follow-up.",
+  "I appreciate everything you've shared. Here's one last question to lock in your study plan.",
+];
+
+const PERSONALIZED_QUESTION_HEADERS = [
+  "Here's the first follow-up question:",
+  "Here's another follow-up to explore:",
+  "Final follow-up question:",
+];
+
+const PERSONALIZED_QUESTION_CLOSINGS = [
+  "Share whatever comes to mind—every detail helps me shape your study plan.",
+  "Your response helps me connect you with the right resources.",
+  "Your answer will help me finalize the lesson recommendations.",
+];
+
+const PERSONALIZED_REMINDER_INTROS = [
+  "Just circling back to that first follow-up question whenever you're ready.",
+  "Thanks for your patience—I'm still curious about this follow-up.",
+  "Before we wrap up, could you share your thoughts on this last follow-up question?",
+];
+
+const PERSONALIZED_REMINDER_CLOSINGS = [
+  "Anything you share will help me tailor the CBCS resources.",
+  "Even a quick note will help me fine-tune the suggestions.",
+  "Once I have your answer, I'll send over the lesson plan.",
+];
+
+function getPersonalizedCopy(
+  source: string[],
+  number: number,
+  fallback: string
+): string {
+  return source[number - 1] ?? fallback;
+}
+
 function formatPersonalizedQuestionMessage(
   number: number,
   question: string
 ): string {
-  const intro =
-    number === 1
-      ? "Thanks for sharing those readiness insights! I have a few personalized questions to tailor your CBCS study plan."
-      : "Appreciate the update! Here's another quick question to fine-tune your CBCS study plan.";
+  const intro = getPersonalizedCopy(
+    PERSONALIZED_QUESTION_INTROS,
+    number,
+    PERSONALIZED_QUESTION_INTROS[0]!
+  );
+  const header = getPersonalizedCopy(
+    PERSONALIZED_QUESTION_HEADERS,
+    number,
+    "Here's a follow-up question:"
+  );
+  const closing = getPersonalizedCopy(
+    PERSONALIZED_QUESTION_CLOSINGS,
+    number,
+    PERSONALIZED_QUESTION_CLOSINGS[PERSONALIZED_QUESTION_CLOSINGS.length - 1]!
+  );
 
-  const closing =
-    number === 3
-      ? "Your answer will help me finalize the lesson recommendations."
-      : "Share whatever comes to mind—every detail helps me shape your study plan.";
-
-  return [
-    intro,
-    `Personalized Question ${number}: ${question}`,
-    closing,
-  ].join("\n\n");
+  return [intro, `${header} ${question}`, closing].join("\n\n");
 }
 
 function formatPendingPersonalizedQuestion(
   number: number,
   question: string
 ): string {
+  const reminderIntro = getPersonalizedCopy(
+    PERSONALIZED_REMINDER_INTROS,
+    number,
+    PERSONALIZED_REMINDER_INTROS[0]!
+  );
+  const header = getPersonalizedCopy(
+    PERSONALIZED_QUESTION_HEADERS,
+    number,
+    "Here's a follow-up question:"
+  );
+  const reminderClosing = getPersonalizedCopy(
+    PERSONALIZED_REMINDER_CLOSINGS,
+    number,
+    PERSONALIZED_REMINDER_CLOSINGS[PERSONALIZED_REMINDER_CLOSINGS.length - 1]!
+  );
+
   return [
-    "Take your time—I'm ready for your thoughts whenever you are.",
-    `Reminder — Personalized Question ${number}: ${question}`,
-    "Share anything that comes to mind so I can tailor the next steps.",
+    reminderIntro,
+    `${header} ${question}`,
+    reminderClosing,
   ].join("\n\n");
 }
 
@@ -406,17 +462,28 @@ function extractPersonalizedQuestionState(
       const questionLine = message.content
         .split("\n")
         .map((line) => line.trim())
-        .find((line) => /^Personalized Question \d+:/i.test(line));
+        .find((line) => {
+          return PERSONALIZED_QUESTION_HEADERS.some((header) =>
+            line.toLowerCase().startsWith(header.toLowerCase())
+          );
+        });
 
       if (questionLine) {
-        const match = questionLine.match(/^Personalized Question (\d+):\s*(.+)$/i);
+        const matchIndex = PERSONALIZED_QUESTION_HEADERS.findIndex((header) =>
+          questionLine.toLowerCase().startsWith(header.toLowerCase())
+        );
 
-        if (match) {
-          questions.push({
-            number: Number.parseInt(match[1], 10),
-            question: match[2].trim(),
-            index,
-          });
+        if (matchIndex !== -1) {
+          const header = PERSONALIZED_QUESTION_HEADERS[matchIndex]!;
+          const question = questionLine.slice(header.length).trim();
+
+          if (question.length > 0) {
+            questions.push({
+              number: matchIndex + 1,
+              question,
+              index,
+            });
+          }
         }
       }
     }
