@@ -57,6 +57,17 @@ type GedReadiness = "not-ready" | "somewhat-ready" | "refresher";
 
 type GedSubject = "math" | "reading" | "language-mechanics" | "writing";
 
+type KnowledgeQuestionId =
+  | "icd10-purpose"
+  | "medial-meaning"
+  | "hipaa-entities";
+
+type KnowledgeAnswer = {
+  questionId: KnowledgeQuestionId;
+  answer: string;
+  optionIndex: number;
+};
+
 type AnswerSummary = {
   diploma: string;
   spreadsheet: string;
@@ -65,6 +76,7 @@ type AnswerSummary = {
   teamwork: string;
   gedReadiness?: string;
   gedSubjects?: string;
+  knowledgeAnswers?: KnowledgeAnswer[];
 };
 
 type PlanInputs = {
@@ -75,6 +87,7 @@ type PlanInputs = {
   teamwork: SkillConfidence;
   gedReadiness: GedReadiness | null;
   gedSubjects: GedSubject[];
+  knowledgeAnswers: KnowledgeAnswer[];
 };
 
 type ParsedResponse<T> = {
@@ -107,8 +120,17 @@ const EXAM_TOPICS = [
 const KNOWLEDGE_ASSESSMENT_INTRO =
   "CBCS Knowledge Assessment – Use the practice quiz to pinpoint topics for review.";
 
-const SAMPLE_QUESTIONS = [
+type KnowledgeQuestion = {
+  id: KnowledgeQuestionId;
+  prompt: string;
+  options: string[];
+  correctOptionIndex: number;
+  supportLessons: string[];
+};
+
+const KNOWLEDGE_QUESTIONS: KnowledgeQuestion[] = [
   {
+    id: "icd10-purpose",
     prompt:
       "Q1: Billing and coding specialists need to understand the purpose of medical code sets. What is the purpose of ICD-10-CM code?",
     options: [
@@ -117,20 +139,31 @@ const SAMPLE_QUESTIONS = [
       "For reporting outpatient procedures and services healthcare providers perform",
       "For reporting nonphysician supplies, procedures, products, and services provided to Medicare beneficiaries or individuals enrolled in private health insurance programs",
     ],
+    correctOptionIndex: 0,
+    supportLessons: ["Medical Coding Sets"],
   },
   {
+    id: "medial-meaning",
     prompt:
-      "Q2: Medical billing and coding specialists also have to be familiar with medical terminology. What is the meaning of medial?",
+      "Q2: Medical billing and coding specialists also have to be familiar with medical terminology. For example, being able to describe the location of an anatomic site is important for diagnosis and procedural coding. What is the meaning of medial?",
     options: [
       "Toward the middle of the body",
       "Away from the midline of the body",
       "Below",
       "Above",
     ],
+    correctOptionIndex: 0,
+    supportLessons: [
+      "Anatomy and Physiology: Part 1",
+      "Anatomy and Physiology: Part 2",
+      "Anatomy and Physiology: Part 3",
+      "Medical Terminology",
+    ],
   },
   {
+    id: "hipaa-entities",
     prompt:
-      "Q3: Medical billing and coding specialists need to be familiar with HIPAA. Which of the following are covered entities under HIPAA?",
+      "Q3: Medical billing and coding specialists need to be familiar with the Health Insurance Portability and Accountability Act (HIPAA) and do their part to keep patient health information private and secure. Which of the following are covered entities under HIPAA?",
     options: [
       "Health plans",
       "Healthcare clearinghouses",
@@ -138,21 +171,17 @@ const SAMPLE_QUESTIONS = [
       "All of the above",
       "None of the above",
     ],
+    correctOptionIndex: 3,
+    supportLessons: ["Regulatory Compliance"],
   },
 ];
 
-const CBCS_ASSESSMENT_PROMPT = [
+const CBCS_ASSESSMENT_INTRO = [
   "Got it. Thanks for helping me better understand your soft skills needs. To get certified, you will also need to pass a certification test, such as the National Healthcareer Association Certified Coding and Billing Specialist (CBCS) exam.",
   "The CBCS exam includes questions about the following topics: The Revenue Cycle and Regulatory Compliance, Insurance Eligibility and Other Payer Requirements, Coding and Coding Guidelines, and Billing and Reimbursement.",
   "",
   "I’ve pulled together some questions that will help focus your studies for preparing for the CBCS exam. Please answer the questions in this assessment.",
-  "CBCS Knowledge Assessment",
-  SAMPLE_QUESTIONS.map((question) => {
-    const optionLines = question.options
-      .map((option, index) => `${String.fromCharCode(65 + index)}) ${option}`)
-      .join("\n");
-    return `${question.prompt}\n${optionLines}`;
-  }).join("\n\n"),
+  "CBCS Knowledge Assessment [User takes exam, which pulls 1-2 drill items each unit in the course. Sample questions follow. Incorrect answer in red.]",
 ].join("\n");
 
 const GED_MATH_ASSESSMENT_PROMPT = [
@@ -197,6 +226,41 @@ const CORE_CBCS_LESSONS = [
   "Medical Coding Sets",
   "Billing and Reimbursement",
 ];
+
+function buildKnowledgeQuestionPrompt(question: KnowledgeQuestion): string {
+  const optionLines = question.options.map((option) => `• ${option}`).join("\n");
+  return `${question.prompt}\n${optionLines}`;
+}
+
+function createKnowledgeAnswerParser(
+  question: KnowledgeQuestion
+): (content: string) => { answer: string; optionIndex: number } | null {
+  return (content: string) => {
+    const latestAnswer = extractLatestAnswer(content);
+    const normalizedAnswer = normalizeText(latestAnswer);
+
+    for (let index = 0; index < question.options.length; index += 1) {
+      const option = question.options[index]!;
+      const normalizedOption = normalizeText(option);
+
+      if (normalizedAnswer === normalizedOption) {
+        return { answer: option, optionIndex: index };
+      }
+
+      const optionLetter = String.fromCharCode(65 + index).toLowerCase();
+
+      if (normalizedAnswer === optionLetter) {
+        return { answer: option, optionIndex: index };
+      }
+
+      if (normalizedAnswer.startsWith(`${optionLetter})`)) {
+        return { answer: option, optionIndex: index };
+      }
+    }
+
+    return null;
+  };
+}
 
 const DIGITAL_EXCEL_LESSON =
   "Using Technology to Present Information: Microsoft Excel";
@@ -747,15 +811,40 @@ function getDigitalLiteracyLine(
   return "- Keep practicing spreadsheet workflows to manage claims, denials, and study notes—your Excel skills are a real asset.";
 }
 
+function selectKnowledgeLessonBoosts(
+  knowledgeAnswers: KnowledgeAnswer[]
+): string[] {
+  const boosts = new Set<string>();
+
+  for (const response of knowledgeAnswers) {
+    const question = KNOWLEDGE_QUESTIONS.find(
+      (entry) => entry.id === response.questionId
+    );
+
+    if (!question) {
+      continue;
+    }
+
+    if (response.optionIndex !== question.correctOptionIndex) {
+      question.supportLessons.forEach((lesson) => boosts.add(lesson));
+    }
+  }
+
+  return Array.from(boosts);
+}
+
 function getRecommendedLessonLines(
   spreadsheetComfort: SpreadsheetComfort,
   digitalLessons: string[],
   softSkillLessons: string[],
-  academicSupport: { lessons: string[] } | null
+  academicSupport: { lessons: string[] } | null,
+  knowledgeBoosts: string[]
 ): string[] {
   const lines: (string | null)[] = [];
 
-  lines.push(formatLessonGroup("CBCS Certification Prep", CORE_CBCS_LESSONS));
+  const cbcsLessons = [...knowledgeBoosts, ...CORE_CBCS_LESSONS];
+
+  lines.push(formatLessonGroup("CBCS Certification Prep", cbcsLessons));
 
   lines.push(
     formatLessonGroup(
@@ -789,6 +878,7 @@ function buildPlanBlueprint(inputs: PlanInputs): PlanBlueprint {
     teamwork,
     gedReadiness,
     gedSubjects,
+    knowledgeAnswers,
   } = inputs;
 
   const academicSupport = hasDiploma
@@ -821,11 +911,13 @@ function buildPlanBlueprint(inputs: PlanInputs): PlanBlueprint {
 
   const examTopicLines = EXAM_TOPICS.map((topic) => `- ${topic}`);
   const knowledgeAssessmentLine = `- ${KNOWLEDGE_ASSESSMENT_INTRO}`;
+  const knowledgeBoosts = selectKnowledgeLessonBoosts(knowledgeAnswers);
   const recommendedLessonLines = getRecommendedLessonLines(
     spreadsheetComfort,
     digitalLessons,
     softSkillLessons,
-    academicSupport
+    academicSupport,
+    knowledgeBoosts
   );
 
   return {
@@ -928,6 +1020,25 @@ async function generateCbcsPlan(
     }
   }
 
+  if (answers.knowledgeAnswers?.length) {
+    let counter = answerSummaryLines.length + 1;
+
+    for (const response of answers.knowledgeAnswers) {
+      const question = KNOWLEDGE_QUESTIONS.find(
+        (entry) => entry.id === response.questionId
+      );
+
+      if (!question) {
+        continue;
+      }
+
+      answerSummaryLines.push(
+        `${counter}. ${question.prompt}\n   Answer: ${response.answer}`
+      );
+      counter += 1;
+    }
+  }
+
   const answerSummary = answerSummaryLines.join("\n");
 
   const normalizedInterpretationLines = [
@@ -946,6 +1057,25 @@ async function generateCbcsPlan(
           ? inputs.gedSubjects.join(", ")
           : "Not captured"
       }`
+    );
+  }
+
+  for (const response of inputs.knowledgeAnswers) {
+    const question = KNOWLEDGE_QUESTIONS.find(
+      (entry) => entry.id === response.questionId
+    );
+
+    if (!question) {
+      continue;
+    }
+
+    const status =
+      response.optionIndex === question.correctOptionIndex
+        ? "Correct"
+        : "Needs review";
+
+    normalizedInterpretationLines.push(
+      `- ${question.prompt} -> ${response.answer} (${status})`
     );
   }
 
@@ -1163,30 +1293,73 @@ async function getAssistantReply(messages: ChatMessage[]): Promise<string> {
     );
   }
 
-  if (hasDiploma) {
-    const assessmentIndex = findAssistantMessageIndex(
-      messages,
-      CBCS_ASSESSMENT_PROMPT
+  const knowledgeAnswers: KnowledgeAnswer[] = [];
+
+  if (!hasDiploma && gedSubjects.length > 0 && gedSubjects.includes("math")) {
+    const assessmentPrompt = buildGedAssessmentPrompt(gedSubjects);
+    const assessmentIndex = findAssistantMessageIndex(messages, assessmentPrompt);
+
+    if (
+      assessmentIndex === -1 ||
+      !hasUserReplyAfterIndex(messages, assessmentIndex)
+    ) {
+      return assessmentPrompt;
+    }
+  }
+
+  const introIndex = findAssistantMessageIndex(
+    messages,
+    CBCS_ASSESSMENT_INTRO
+  );
+
+  if (introIndex === -1) {
+    return CBCS_ASSESSMENT_INTRO;
+  }
+
+  let lastUserIndex = teamworkResult.entry.index;
+
+  for (const question of KNOWLEDGE_QUESTIONS) {
+    const prompt = buildKnowledgeQuestionPrompt(question);
+    const assistantIndex = findAssistantMessageIndex(messages, prompt);
+
+    if (assistantIndex === -1) {
+      return prompt;
+    }
+
+    if (!hasUserReplyAfterIndex(messages, assistantIndex)) {
+      return prompt;
+    }
+
+    const result = findParsedResponse(
+      userMessages,
+      lastUserIndex,
+      createKnowledgeAnswerParser(question)
     );
 
-    if (assessmentIndex === -1 || !hasUserReplyAfterIndex(messages, assessmentIndex)) {
-      return CBCS_ASSESSMENT_PROMPT;
+    if (!result.entry) {
+      return prompt;
     }
-  } else if (gedSubjects.length > 0) {
-    if (gedSubjects.includes("math")) {
-      const assessmentPrompt = buildGedAssessmentPrompt(gedSubjects);
-      const assessmentIndex = findAssistantMessageIndex(
-        messages,
-        assessmentPrompt
-      );
 
-      if (
-        assessmentIndex === -1 ||
-        !hasUserReplyAfterIndex(messages, assessmentIndex)
-      ) {
-        return assessmentPrompt;
-      }
+    const parsed = result.value;
+
+    if (!parsed) {
+      return [
+        "Thanks for sticking with me! Please choose one of the answer choices so I can tailor the CBCS study plan.",
+        prompt,
+      ].join("\n");
     }
+
+    knowledgeAnswers.push({
+      questionId: question.id,
+      answer: parsed.answer,
+      optionIndex: parsed.optionIndex,
+    });
+
+    lastUserIndex = result.entry.index;
+  }
+
+  if (knowledgeAnswers.length > 0) {
+    answers.knowledgeAnswers = knowledgeAnswers;
   }
 
   return await generateCbcsPlan({
@@ -1197,6 +1370,7 @@ async function getAssistantReply(messages: ChatMessage[]): Promise<string> {
     teamwork,
     gedReadiness,
     gedSubjects,
+    knowledgeAnswers,
     answers,
   });
 }
