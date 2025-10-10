@@ -83,6 +83,11 @@ function parseAssistantMessage(content: string): {
             const optionLine = optionLineRaw.trim();
 
             if (optionLine.length === 0) {
+              if (options.length > 0) {
+                optionIndex += 1;
+                break;
+              }
+
               optionIndex += 1;
               continue;
             }
@@ -108,20 +113,63 @@ function parseAssistantMessage(content: string): {
             optionIndex += 1;
           }
 
+          const normalizedHelperSegments = helperSegments
+            .map((segment) => segment.trim())
+            .filter(Boolean);
+          const uniqueHelperSegments = Array.from(
+            new Set(normalizedHelperSegments)
+          );
+          const combinedHelperText =
+            uniqueHelperSegments.join(" ") || null;
+
+          const isLikelyNumberedQuestion = /^q\d+/i.test(questionText);
+
+          if (options.length === 0 && isLikelyNumberedQuestion) {
+            const fallbackOptions: string[] = [];
+            let fallbackIndex = index + 1;
+
+            while (fallbackIndex < lines.length) {
+              const fallbackRaw = lines[fallbackIndex];
+              const fallbackLine = fallbackRaw.trim();
+
+              if (fallbackLine.length === 0) {
+                if (fallbackOptions.length > 0) {
+                  fallbackIndex += 1;
+                  break;
+                }
+
+                fallbackIndex += 1;
+                continue;
+              }
+
+              if (fallbackLine.endsWith("?")) {
+                break;
+              }
+
+              const normalizedFallback = fallbackLine
+                .replace(/^[-•]\s*/, "")
+                .trim();
+
+              if (normalizedFallback.length === 0) {
+                fallbackIndex += 1;
+                continue;
+              }
+
+              fallbackOptions.push(normalizedFallback);
+              fallbackIndex += 1;
+            }
+
+            if (fallbackOptions.length > 0) {
+              options.push(...fallbackOptions.slice(0, 6));
+              optionIndex = fallbackIndex;
+            }
+          }
+
           if (
             options.length > 0 &&
             options.length <= 6 &&
             options.every((option) => option.length <= 160)
           ) {
-            const normalizedHelperSegments = helperSegments
-              .map((segment) => segment.trim())
-              .filter(Boolean);
-            const uniqueHelperSegments = Array.from(
-              new Set(normalizedHelperSegments)
-            );
-            const combinedHelperText =
-              uniqueHelperSegments.join(" ") || null;
-
             quickReplies = {
               question: questionText,
               options,
