@@ -161,11 +161,12 @@ const SYSTEM_PROMPT = `You are Aztec IET's AI advisor supporting adult learners 
 
 Follow these formatting rules exactly:
 1. Open with the sentence: "Thanks for sharing those details! Here's the Aztec IET guidance for the Certified Billing and Coding Specialist (CBCS) pathway:" on its own line.
-2. Include sections titled "Eligibility:", "Digital Literacy:", "Soft Skill Focus:", "Certification Prep Focus:", "CBCS Knowledge Assessment:", "Sample questions to guide your study:", and "Recommended Lessons:". Separate sections with a blank line.
-3. Under "Certification Prep Focus:" list the four CBCS domains exactly as provided. Under "CBCS Knowledge Assessment:" reference the provided practice quiz line. Under "Sample questions to guide your study:" include each sample question prompt and answer options exactly as provided.
+2. Include sections titled "Eligibility", "Digital Literacy", "Soft Skill Focus", "Certification Prep Focus", "CBCS Knowledge Assessment", "Sample questions to guide your study", and "Recommended Lessons". Render each section title as a level-3 Markdown heading (for example, \`### Eligibility\`) and separate sections with a blank line.
+3. Under "Certification Prep Focus" list the four CBCS domains exactly as provided. Under "CBCS Knowledge Assessment" reference the provided practice quiz line. Under "Sample questions to guide your study" include each sample question prompt and answer options exactly as provided.
 4. Use the supplied guidance notes verbatim whenever they are provided (for example, digital literacy lines, soft skill suggestions, and recommended lessons). You may adjust sentence flow for readability but do not alter the meaning.
 5. When personalized follow-up responses are provided, reference them explicitly in your guidance and tailor the recommended lessons to address the learner's needs. You may introduce new lesson ideas that align with the CBCS pathway when appropriate.
-6. Keep the tone encouraging, actionable, and professional.`;
+6. Keep the tone encouraging, actionable, and professional.
+7. Ensure the full response is valid Markdown, using bullet lists and line breaks exactly as supplied in the guidance notes.`;
 
 const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1";
 const OPENAI_MODEL = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
@@ -652,20 +653,20 @@ function formatSoftSkillRecommendations(
 
 function getEligibilityLine(hasDiploma: boolean): string {
   return hasDiploma
-    ? "• You already meet the high school requirement—great work checking that box."
-    : "• Plan time to finish your high-school equivalency (GED/HiSET) so you can sit for the CBCS exam.";
+    ? "- You already meet the high school requirement—great work checking that box."
+    : "- Plan time to finish your high-school equivalency (GED/HiSET) so you can sit for the CBCS exam.";
 }
 
 function getDigitalLiteracyLine(spreadsheetComfort: SpreadsheetComfort): string {
   if (spreadsheetComfort === "familiar") {
-    return "• Build confidence with Excel formatting, formulas, and filtering so you can track denials and appeals efficiently.";
+    return "- Build confidence with Excel formatting, formulas, and filtering so you can track denials and appeals efficiently.";
   }
 
   if (spreadsheetComfort === "novice") {
-    return "• Start with the Digital Literacy lesson \"Using Technology to Present Information: Microsoft Excel\" to learn spreadsheets from the ground up.";
+    return "- Start with the Digital Literacy lesson \"Using Technology to Present Information: Microsoft Excel\" to learn spreadsheets from the ground up.";
   }
 
-  return "• Keep practicing spreadsheet workflows to manage claims, denials, and study notes.";
+  return "- Keep practicing spreadsheet workflows to manage claims, denials, and study notes.";
 }
 
 function getRecommendedLessonLines(
@@ -681,7 +682,7 @@ function getRecommendedLessonLines(
     );
   }
 
-  return lessons.map((lesson) => `• ${lesson}`);
+  return lessons.map((lesson) => `- ${lesson}`);
 }
 
 function buildPlanBlueprint(inputs: PlanInputs): PlanBlueprint {
@@ -693,15 +694,17 @@ function buildPlanBlueprint(inputs: PlanInputs): PlanBlueprint {
     timeManagement,
     communication,
     teamwork
-  ).map((suggestion) => `• ${suggestion}`);
+  ).map((suggestion) => `- ${suggestion}`);
 
   const certificationIntroLine =
-    "• Start a study notebook that covers the four major CBCS domains.";
+    "- Start a study notebook that covers the four major CBCS domains.";
 
-  const examTopicLines = EXAM_TOPICS.map((topic) => `• ${topic}`);
-  const knowledgeAssessmentLine = `• ${KNOWLEDGE_ASSESSMENT_INTRO}`;
+  const examTopicLines = EXAM_TOPICS.map((topic) => `- ${topic}`);
+  const knowledgeAssessmentLine = `- ${KNOWLEDGE_ASSESSMENT_INTRO}`;
   const sampleQuestionBlocks = SAMPLE_QUESTIONS.map((question) => {
-    const optionLines = question.options.map((option) => `• ${option}`).join("\n");
+    const optionLines = question.options
+      .map((option, index) => `${String.fromCharCode(65 + index)}) ${option}`)
+      .join("\n");
     return `${question.prompt}\n${optionLines}`;
   });
   const recommendedLessonLines = getRecommendedLessonLines(spreadsheetComfort);
@@ -732,13 +735,13 @@ function buildStaticPlan(inputs: PlanInputs): string {
 
   return [
     PLAN_OPENING_LINE,
-    `Eligibility:\n${blueprint.eligibilityLine}`,
-    `Digital Literacy:\n${blueprint.digitalLiteracyLine}`,
-    `Soft Skill Focus:\n${softSkillContent}`,
-    `Certification Prep Focus:\n${certificationContent}`,
-    `CBCS Knowledge Assessment:\n${blueprint.knowledgeAssessmentLine}`,
-    `Sample questions to guide your study:\n${sampleQuestionContent}`,
-    `Recommended Lessons:\n${recommendedLessonContent}`,
+    `### Eligibility\n${blueprint.eligibilityLine}`,
+    `### Digital Literacy\n${blueprint.digitalLiteracyLine}`,
+    `### Soft Skill Focus\n${softSkillContent}`,
+    `### Certification Prep Focus\n${certificationContent}`,
+    `### CBCS Knowledge Assessment\n${blueprint.knowledgeAssessmentLine}`,
+    `### Sample questions to guide your study\n${sampleQuestionContent}`,
+    `### Recommended Lessons\n${recommendedLessonContent}`,
   ].join("\n\n");
 }
 
