@@ -58,26 +58,27 @@ export default function MessageList({
             }`}
           >
             {message.role === "assistant" && "markdownContent" in message ? (
-              <ReactMarkdown
-                className="space-y-3 text-sm leading-relaxed text-neutral-900"
-                remarkPlugins={[remarkGfm]}
-                components={{
-                  p: ({ children }) => (
-                    <p className="whitespace-pre-wrap leading-relaxed">{children}</p>
-                  ),
-                  li: ({ children }) => (
-                    <li className="leading-relaxed">{children}</li>
-                  ),
-                  ul: ({ children }) => (
-                    <ul className="ml-5 list-disc space-y-1">{children}</ul>
-                  ),
-                  ol: ({ children }) => (
-                    <ol className="ml-5 list-decimal space-y-1">{children}</ol>
-                  ),
-                }}
-              >
-                {message.markdownContent}
-              </ReactMarkdown>
+              <div className="space-y-3 text-sm leading-relaxed text-neutral-900">
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  components={{
+                    p: ({ children }) => (
+                      <p className="whitespace-pre-wrap leading-relaxed">{children}</p>
+                    ),
+                    li: ({ children }) => (
+                      <li className="leading-relaxed">{children}</li>
+                    ),
+                    ul: ({ children }) => (
+                      <ul className="ml-5 list-disc space-y-1">{children}</ul>
+                    ),
+                    ol: ({ children }) => (
+                      <ol className="ml-5 list-decimal space-y-1">{children}</ol>
+                    ),
+                  }}
+                >
+                  {message.markdownContent}
+                </ReactMarkdown>
+              </div>
             ) : (
               <div className="whitespace-pre-wrap text-sm leading-relaxed">
                 {message.content}
