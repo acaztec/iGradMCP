@@ -54,7 +54,7 @@ function parseAssistantMessage(content: string): {
         const questionMarkIndex = questionCandidate.indexOf("?");
         const hasQuestionMark = questionMarkIndex !== -1;
 
-        if (hasQuestionMark && !/^Q\d+:/i.test(questionCandidate)) {
+        if (hasQuestionMark) {
           const questionText = questionCandidate
             .slice(0, questionMarkIndex + 1)
             .trim();
