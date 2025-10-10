@@ -21,15 +21,21 @@ git push -u origin main
 
 ## 3. Environment Variables
 
-None are required for this demo. If you extend the app with APIs or databases later, add them in the Vercel dashboard as needed.
+Add the OpenAI credentials that power the final CBCS summary:
+
+| Variable | Required | Value |
+| --- | --- | --- |
+| `OPENAI_API_KEY` | Yes | Your OpenAI API key with access to `gpt-4o-mini` (or another configured model). |
+| `OPENAI_MODEL` | No | Override the default model name if desired. |
+| `OPENAI_BASE_URL` | No | Point to a compatible OpenAI endpoint if not using the default cloud API. |
 
 ## 4. Deploy & Verify
 
 Click **Deploy**. After the build completes:
 
 - Open the live URL.
-- Select the **Pharmacy Technician** pathway and walk through the prompts.
-- Confirm you receive the scripted lesson recommendations and next steps.
+- Select the **Certified Billing and Coding Specialist (CBCS)** pathway and walk through the prompts.
+- Confirm you receive the AI-authored lesson recommendations and next steps.
 
 ## Troubleshooting
 

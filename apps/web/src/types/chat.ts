@@ -5,4 +5,8 @@ export interface ChatMessage {
   role: ChatMessageRole;
   content: string;
   createdAt: string;
+  quickReplies?: {
+    question: string;
+    options: string[];
+  } | null;
 }
