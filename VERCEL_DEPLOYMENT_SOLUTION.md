@@ -6,15 +6,15 @@ With the catalog and MCP dependencies removed, deployment is straightforward. Us
 
 - ✅ Removed legacy Turborepo/pnpm configuration so Vercel treats `apps/web` as a standalone Next.js app.
 - ✅ Dropped `.npmrc` that pointed to a localhost registry.
-- ✅ Simplified the chat API to use deterministic responses—no OpenAI keys or Excel files required.
+- ✅ Simplified the chat API to script the intake and hand off the final summary to OpenAI.
 
 ## Deployment Steps
 
 1. Push the latest code to GitHub.
 2. In Vercel, import the repository and set **Root Directory** to `apps/web`.
 3. Leave the default build settings (`npm install`, `npm run build`).
-4. No environment variables are required for this demo.
-5. Deploy and verify the CBCS conversation renders as expected.
+4. Add `OPENAI_API_KEY` (and optional `OPENAI_MODEL`/`OPENAI_BASE_URL`) to the project settings.
+5. Deploy and verify the CBCS conversation renders as expected and the final response is AI-authored.
 
 ## Troubleshooting
 
