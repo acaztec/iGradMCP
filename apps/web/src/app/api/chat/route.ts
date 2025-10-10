@@ -184,6 +184,18 @@ const CBCS_ASSESSMENT_INTRO = [
   "CBCS Knowledge Assessment [User takes exam, which pulls 1-2 drill items each unit in the course. Sample questions follow. Incorrect answer in red.]",
 ].join("\n");
 
+function buildAssessmentIntroWithFirstQuestion(): string {
+  const [firstQuestion] = KNOWLEDGE_QUESTIONS;
+
+  if (!firstQuestion) {
+    return CBCS_ASSESSMENT_INTRO;
+  }
+
+  const firstPrompt = buildKnowledgeQuestionPrompt(firstQuestion);
+
+  return [CBCS_ASSESSMENT_INTRO, firstPrompt].join("\n\n");
+}
+
 const GED_MATH_ASSESSMENT_PROMPT = [
   "I’ve pulled together some questions that will help focus your studies for math. Please answer the questions in this assessment.",
   "Math Skills Assessment",
@@ -1032,8 +1044,18 @@ async function generateCbcsPlan(
         continue;
       }
 
+      const isCorrect =
+        response.optionIndex === question.correctOptionIndex;
+      const correctAnswer =
+        question.options[question.correctOptionIndex] ?? "";
+      const answerLineParts = [`Answer: ${response.answer}`];
+
+      if (!isCorrect && correctAnswer) {
+        answerLineParts.push(`Correct answer: ${correctAnswer}`);
+      }
+
       answerSummaryLines.push(
-        `${counter}. ${question.prompt}\n   Answer: ${response.answer}`
+        `${counter}. ${question.prompt}\n   ${answerLineParts.join(" | ")}`
       );
       counter += 1;
     }
@@ -1069,13 +1091,20 @@ async function generateCbcsPlan(
       continue;
     }
 
+    const correctAnswer = question.options[question.correctOptionIndex] ?? "";
     const status =
       response.optionIndex === question.correctOptionIndex
         ? "Correct"
         : "Needs review";
 
+    const parts = [
+      `Learner answered: ${response.answer}`,
+      correctAnswer ? `Correct answer: ${correctAnswer}` : null,
+      `Result: ${status}`,
+    ].filter((part): part is string => Boolean(part));
+
     normalizedInterpretationLines.push(
-      `- ${question.prompt} -> ${response.answer} (${status})`
+      `- ${question.prompt} -> ${parts.join(" | ")}`
     );
   }
 
@@ -1313,7 +1342,7 @@ async function getAssistantReply(messages: ChatMessage[]): Promise<string> {
   );
 
   if (introIndex === -1) {
-    return CBCS_ASSESSMENT_INTRO;
+    return buildAssessmentIntroWithFirstQuestion();
   }
 
   let lastUserIndex = teamworkResult.entry.index;
