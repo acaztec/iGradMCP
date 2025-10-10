@@ -59,12 +59,30 @@ type AnswerSummary = {
   teamwork: string;
 };
 
+type PersonalizedFollowUp = {
+  question: string;
+  answer: string;
+};
+
 type PlanInputs = {
   hasDiploma: boolean;
   spreadsheetComfort: SpreadsheetComfort;
   timeManagement: SkillConfidence;
   communication: SkillConfidence;
   teamwork: SkillConfidence;
+};
+
+type PersonalizedQuestionEntry = {
+  number: number;
+  question: string;
+  index: number;
+};
+
+type PersonalizedQuestionState = {
+  planDelivered: boolean;
+  questions: PersonalizedQuestionEntry[];
+  answers: Map<number, { content: string; index: number }>;
+  pendingQuestionNumber: number | null;
 };
 
 type PlanBlueprint = {
@@ -127,6 +145,18 @@ const SAMPLE_QUESTIONS = [
   },
 ];
 
+const PLAN_OPENING_LINE =
+  "Thanks for sharing those details! Here's the Aztec IET guidance for the Certified Billing and Coding Specialist (CBCS) pathway:";
+
+const PERSONALIZED_QUESTION_SYSTEM_PROMPT =
+  "You are Aztec IET's AI advisor helping adult learners pursue the Certified Billing and Coding Specialist (CBCS) credential. Craft concise follow-up questions that gather additional context about their goals, study habits, or support needs. Respond ONLY with valid JSON shaped as {\"question\":\"...\"}. The question must be a single sentence of 25 words or fewer, end with a question mark, and stay focused on the CBCS journey. Avoid repeating topics from previous follow-up questions.";
+
+const FALLBACK_PERSONALIZED_QUESTIONS = [
+  "What type of healthcare setting are you most interested in working in once you earn your CBCS certification?",
+  "Which part of the medical billing or coding process do you feel you need the most practice with right now?",
+  "What kind of study schedule or support system will help you stay consistent while you prepare for the CBCS exam?",
+];
+
 const SYSTEM_PROMPT = `You are Aztec IET's AI advisor supporting adult learners who want to become Certified Billing and Coding Specialists (CBCS). Keep the focus exclusively on the CBCS pathway. When provided with learner responses and recommended focus areas, craft a supportive guidance message that helps them prepare for certification.
 
 Follow these formatting rules exactly:
@@ -134,7 +164,8 @@ Follow these formatting rules exactly:
 2. Include sections titled "Eligibility:", "Digital Literacy:", "Soft Skill Focus:", "Certification Prep Focus:", "CBCS Knowledge Assessment:", "Sample questions to guide your study:", and "Recommended Lessons:". Separate sections with a blank line.
 3. Under "Certification Prep Focus:" list the four CBCS domains exactly as provided. Under "CBCS Knowledge Assessment:" reference the provided practice quiz line. Under "Sample questions to guide your study:" include each sample question prompt and answer options exactly as provided.
 4. Use the supplied guidance notes verbatim whenever they are provided (for example, digital literacy lines, soft skill suggestions, and recommended lessons). You may adjust sentence flow for readability but do not alter the meaning.
-5. Keep the tone encouraging, actionable, and professional.`;
+5. When personalized follow-up responses are provided, reference them explicitly in your guidance and tailor the recommended lessons to address the learner's needs. You may introduce new lesson ideas that align with the CBCS pathway when appropriate.
+6. Keep the tone encouraging, actionable, and professional.`;
 
 const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1";
 const OPENAI_MODEL = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
@@ -157,6 +188,27 @@ function extractLatestAnswer(content: string): string {
   }
 
   return segments[segments.length - 1];
+}
+
+function extractJsonObject<T>(content: string): T {
+  const match = content.match(/\{[\s\S]*\}/);
+
+  if (!match) {
+    throw new Error("No JSON object found in response.");
+  }
+
+  return JSON.parse(match[0]) as T;
+}
+
+function parsePersonalizedQuestionResponse(content: string): string {
+  const data = extractJsonObject<{ question?: string }>(content);
+  const question = typeof data.question === "string" ? data.question.trim() : "";
+
+  if (!question) {
+    throw new Error("Personalized question response did not include a question field.");
+  }
+
+  return question.endsWith("?") ? question : `${question}?`;
 }
 
 function findPathway(content: string): { id: PathwayId; label: string } | null {
@@ -280,17 +332,6 @@ function parseSkillConfidence(content: string): SkillConfidence | null {
   return null;
 }
 
-function findFirstMeaningfulMessage(messages: string[], startIndex: number) {
-  for (let index = startIndex + 1; index < messages.length; index += 1) {
-    const content = messages[index].trim();
-    if (content.length > 0) {
-      return { index, content } as const;
-    }
-  }
-
-  return null;
-}
-
 function findParsedResponse<T>(
   messages: string[],
   startIndex: number,
@@ -314,6 +355,186 @@ function findParsedResponse<T>(
   }
 
   return { entry: lastEntry, value: null } as const;
+}
+
+function formatPersonalizedQuestionMessage(
+  number: number,
+  question: string
+): string {
+  const intro =
+    number === 1
+      ? "Thanks for sharing those readiness insights! I have a few personalized questions to tailor your CBCS study plan."
+      : "Appreciate the update! Here's another quick question to fine-tune your CBCS study plan.";
+
+  const closing =
+    number === 3
+      ? "Your answer will help me finalize the lesson recommendations."
+      : "Share whatever comes to mind—every detail helps me shape your study plan.";
+
+  return [
+    intro,
+    `Personalized Question ${number}: ${question}`,
+    closing,
+  ].join("\n\n");
+}
+
+function formatPendingPersonalizedQuestion(
+  number: number,
+  question: string
+): string {
+  return [
+    "Take your time—I'm ready for your thoughts whenever you are.",
+    `Reminder — Personalized Question ${number}: ${question}`,
+    "Share anything that comes to mind so I can tailor the next steps.",
+  ].join("\n\n");
+}
+
+function extractPersonalizedQuestionState(
+  messages: ChatMessage[]
+): PersonalizedQuestionState {
+  const questions: PersonalizedQuestionEntry[] = [];
+  let planIndex = -1;
+
+  for (let index = 0; index < messages.length; index += 1) {
+    const message = messages[index];
+
+    if (message.role === "assistant") {
+      if (planIndex === -1 && message.content.includes(PLAN_OPENING_LINE)) {
+        planIndex = index;
+      }
+
+      const questionLine = message.content
+        .split("\n")
+        .map((line) => line.trim())
+        .find((line) => /^Personalized Question \d+:/i.test(line));
+
+      if (questionLine) {
+        const match = questionLine.match(/^Personalized Question (\d+):\s*(.+)$/i);
+
+        if (match) {
+          questions.push({
+            number: Number.parseInt(match[1], 10),
+            question: match[2].trim(),
+            index,
+          });
+        }
+      }
+    }
+  }
+
+  questions.sort((a, b) => a.number - b.number);
+
+  const answers = new Map<number, { content: string; index: number }>();
+
+  for (let qIndex = 0; qIndex < questions.length; qIndex += 1) {
+    const question = questions[qIndex];
+    let limitIndex = messages.length;
+    const nextQuestion = questions[qIndex + 1];
+
+    if (nextQuestion) {
+      limitIndex = Math.min(limitIndex, nextQuestion.index);
+    }
+
+    if (planIndex !== -1 && planIndex > question.index) {
+      limitIndex = Math.min(limitIndex, planIndex);
+    }
+
+    for (let index = question.index + 1; index < limitIndex; index += 1) {
+      const message = messages[index];
+
+      if (message.role !== "user") {
+        continue;
+      }
+
+      const trimmed = message.content.trim();
+
+      if (trimmed.length === 0) {
+        continue;
+      }
+
+      answers.set(question.number, { content: trimmed, index });
+      break;
+    }
+  }
+
+  let pendingQuestionNumber: number | null = null;
+
+  for (const question of questions) {
+    if (!answers.has(question.number)) {
+      pendingQuestionNumber = question.number;
+      break;
+    }
+  }
+
+  return {
+    planDelivered: planIndex !== -1,
+    questions,
+    answers,
+    pendingQuestionNumber,
+  };
+}
+
+async function generatePersonalizedQuestion({
+  number,
+  answers,
+  followUps,
+}: {
+  number: number;
+  answers: AnswerSummary;
+  followUps: PersonalizedFollowUp[];
+}): Promise<string> {
+  const fallback =
+    FALLBACK_PERSONALIZED_QUESTIONS[number - 1] ??
+    FALLBACK_PERSONALIZED_QUESTIONS[FALLBACK_PERSONALIZED_QUESTIONS.length - 1];
+
+  const followUpSummary = followUps.length
+    ? followUps
+        .map(
+          (entry, index) =>
+            `Follow-up ${index + 1}: ${entry.question}\nLearner response: ${entry.answer}`
+        )
+        .join("\n\n")
+    : "No follow-up questions have been answered yet.";
+
+  const userPrompt = [
+    `Prepare Personalized Question ${number} for a CBCS learner.`,
+    "",
+    "Learner intake responses:",
+    `- High-school credential status: ${answers.diploma}`,
+    `- Spreadsheet comfort level: ${answers.spreadsheet}`,
+    `- Time-management outlook: ${answers.timeManagement}`,
+    `- Communication outlook: ${answers.communication}`,
+    `- Teamwork outlook: ${answers.teamwork}`,
+    "",
+    "Previously asked follow-up exchanges:",
+    followUpSummary,
+    "",
+    `Return JSON with the next question only.`,
+  ].join("\n");
+
+  try {
+    const response = await callOpenAi([
+      { role: "system", content: PERSONALIZED_QUESTION_SYSTEM_PROMPT },
+      { role: "user", content: userPrompt },
+    ]);
+
+    let question = parsePersonalizedQuestionResponse(response);
+
+    if (question.length > 220) {
+      question = `${question.slice(0, 217).trimEnd()}...?`;
+    }
+
+    const normalized = question.toLowerCase();
+
+    if (followUps.some((entry) => entry.question.toLowerCase() === normalized)) {
+      return fallback;
+    }
+
+    return question;
+  } catch (error) {
+    console.error("Failed to generate personalized question:", error);
+    return fallback;
+  }
 }
 
 function formatSoftSkillRecommendations(
@@ -443,7 +664,7 @@ function buildStaticPlan(inputs: PlanInputs): string {
   const recommendedLessonContent = blueprint.recommendedLessonLines.join("\n");
 
   return [
-    "Thanks for sharing those details! Here's the Aztec IET guidance for the Certified Billing and Coding Specialist (CBCS) pathway:",
+    PLAN_OPENING_LINE,
     `Eligibility:\n${blueprint.eligibilityLine}`,
     `Digital Literacy:\n${blueprint.digitalLiteracyLine}`,
     `Soft Skill Focus:\n${softSkillContent}`,
@@ -493,10 +714,10 @@ async function callOpenAi(messages: OpenAiMessage[]): Promise<string> {
 }
 
 async function generateCbcsPlan(
-  inputs: PlanInputs & { answers: AnswerSummary }
+  inputs: PlanInputs & { answers: AnswerSummary; followUps: PersonalizedFollowUp[] }
 ): Promise<string> {
   const blueprint = buildPlanBlueprint(inputs);
-  const { answers } = inputs;
+  const { answers, followUps } = inputs;
 
   const answerSummary = [
     `1. Do you have a high-school diploma or high-school equivalency?\n   Answer: ${answers.diploma}`,
@@ -513,6 +734,15 @@ async function generateCbcsPlan(
     `- Communication confidence: ${inputs.communication}`,
     `- Teamwork confidence: ${inputs.teamwork}`,
   ].join("\n");
+
+  const followUpSummary = followUps.length
+    ? followUps
+        .map(
+          (entry, index) =>
+            `Follow-up ${index + 1}: ${entry.question}\nLearner response: ${entry.answer}`
+        )
+        .join("\n\n")
+    : "No personalized follow-up responses were provided.";
 
   const guidanceNotes = [
     `Eligibility bullet:\n${blueprint.eligibilityLine}`,
@@ -536,6 +766,9 @@ async function generateCbcsPlan(
     "",
     "Use the following guidance notes exactly as written when drafting your response (they already reflect the correct phrasing):",
     guidanceNotes,
+    "",
+    "Personalized follow-up context to reference in your guidance:",
+    followUpSummary,
     "",
     "Remember to keep the focus exclusively on the Certified Billing and Coding Specialist (CBCS) pathway and follow the formatting rules in the system prompt.",
   ].join("\n");
@@ -654,15 +887,6 @@ async function getAssistantReply(messages: ChatMessage[]): Promise<string> {
     return "Please choose the option that best describes how you work with others.\n• I work well with others and feel confident in my skills in this area.\n• I could use some suggestions for improving how I work with others.\n• I’m not sure what skills are related to working well with others.";
   }
 
-  const followUpEntry = findFirstMeaningfulMessage(
-    userMessages,
-    teamworkResult.entry.index
-  );
-
-  if (followUpEntry) {
-    return "Happy to help! Let me know whenever you want more resources or practice questions.";
-  }
-
   const answers: AnswerSummary = {
     diploma: extractLatestAnswer(diplomaResult.entry.content),
     spreadsheet: extractLatestAnswer(spreadsheetResult.entry.content),
@@ -671,6 +895,58 @@ async function getAssistantReply(messages: ChatMessage[]): Promise<string> {
     teamwork: extractLatestAnswer(teamworkResult.entry.content),
   };
 
+  const personalizedState = extractPersonalizedQuestionState(messages);
+
+  if (personalizedState.planDelivered) {
+    return "Happy to help! Let me know whenever you want more resources or practice questions.";
+  }
+
+  const answeredFollowUps = personalizedState.questions
+    .map((question) => {
+      const answerEntry = personalizedState.answers.get(question.number);
+
+      if (!answerEntry) {
+        return null;
+      }
+
+      return {
+        question: question.question,
+        answer: answerEntry.content,
+      } as PersonalizedFollowUp;
+    })
+    .filter((entry): entry is PersonalizedFollowUp => entry !== null)
+    .slice(0, 3);
+
+  if (
+    personalizedState.pendingQuestionNumber !== null &&
+    personalizedState.pendingQuestionNumber <= 3
+  ) {
+    const pendingQuestion = personalizedState.questions.find(
+      (question) => question.number === personalizedState.pendingQuestionNumber
+    );
+
+    if (pendingQuestion) {
+      return formatPendingPersonalizedQuestion(
+        pendingQuestion.number,
+        pendingQuestion.question
+      );
+    }
+  }
+
+  if (answeredFollowUps.length < 3) {
+    const nextQuestionNumber = answeredFollowUps.length + 1;
+
+    if (nextQuestionNumber <= 3) {
+      const questionText = await generatePersonalizedQuestion({
+        number: nextQuestionNumber,
+        answers,
+        followUps: answeredFollowUps,
+      });
+
+      return formatPersonalizedQuestionMessage(nextQuestionNumber, questionText);
+    }
+  }
+
   return await generateCbcsPlan({
     hasDiploma,
     spreadsheetComfort,
@@ -678,6 +954,7 @@ async function getAssistantReply(messages: ChatMessage[]): Promise<string> {
     communication,
     teamwork,
     answers,
+    followUps: answeredFollowUps.slice(0, 3),
   });
 }
 

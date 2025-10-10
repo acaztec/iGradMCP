@@ -52,7 +52,7 @@ function parseAssistantMessage(content: string): {
       if (trimmedLine.length > 0) {
         const questionCandidate = trimmedLine.replace(/[”"]+$/, "");
 
-        if (questionCandidate.endsWith("?")) {
+        if (questionCandidate.endsWith("?") && !/^Q\d+:/i.test(questionCandidate)) {
           const options: string[] = [];
           let optionIndex = index + 1;
 
