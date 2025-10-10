@@ -1146,7 +1146,11 @@ async function getAssistantReply(messages: ChatMessage[]): Promise<string> {
   let gedReadiness: GedReadiness | null = null;
   let gedSubjects: GedSubject[] = [];
 
-  if (!hasDiploma && gedReadinessResult && gedSubjectsResult) {
+  if (
+    !hasDiploma &&
+    gedReadinessResult?.entry &&
+    gedSubjectsResult?.entry
+  ) {
     gedReadiness = gedReadinessResult.value;
     gedSubjects = gedSubjectsResult.value ?? [];
     answers.gedReadiness = extractLatestAnswer(
