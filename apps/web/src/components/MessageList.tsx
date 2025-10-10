@@ -10,12 +10,18 @@ type RenderableMessage = ChatMessage & { markdownContent?: string };
 interface MessageListProps {
   messages: ChatMessage[];
   onQuickReplySelect?: (option: string, question: string) => void;
+  onQuickReplySubmit?: (question: string) => void;
+  activeQuickReplyQuestion?: string | null;
+  selectedQuickReplyOptions?: string[];
   isBusy?: boolean;
 }
 
 export default function MessageList({
   messages,
   onQuickReplySelect,
+  onQuickReplySubmit,
+  activeQuickReplyQuestion,
+  selectedQuickReplyOptions = [],
   isBusy = false,
 }: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -132,20 +138,84 @@ export default function MessageList({
             {message.role === "assistant" &&
               message.quickReplies &&
               message.quickReplies.options.length > 0 && (
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {message.quickReplies.options.map((option) => (
-                    <button
-                      key={option}
-                      type="button"
-                      className="rounded-full border border-purple-200 bg-purple-50 px-4 py-1 text-sm font-medium text-purple-800 transition hover:bg-purple-100 disabled:cursor-not-allowed disabled:opacity-60"
-                      onClick={() =>
-                        onQuickReplySelect?.(option, message.quickReplies!.question)
-                      }
-                      disabled={isBusy}
-                    >
-                      {option}
-                    </button>
-                  ))}
+                <div className="mt-3 space-y-3">
+                  {message.quickReplies.selectionMode === "multiple" ? (
+                    <div className="space-y-2">
+                      {message.quickReplies.options.map((option) => {
+                        const isActiveQuickReply =
+                          !!activeQuickReplyQuestion &&
+                          activeQuickReplyQuestion ===
+                            message.quickReplies!.question;
+                        const isSelected =
+                          isActiveQuickReply &&
+                          selectedQuickReplyOptions.includes(option);
+
+                        return (
+                          <label
+                            key={option}
+                            className={`flex items-center gap-3 rounded-xl border px-3 py-2 text-sm font-medium transition ${
+                              isSelected
+                                ? "border-purple-400 bg-purple-50 text-purple-900"
+                                : "border-purple-100 bg-white text-neutral-900"
+                            } ${
+                              !isActiveQuickReply || isBusy
+                                ? "opacity-60"
+                                : "hover:border-purple-300 hover:bg-purple-50"
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() =>
+                                onQuickReplySelect?.(
+                                  option,
+                                  message.quickReplies!.question
+                                )
+                              }
+                              disabled={!isActiveQuickReply || isBusy}
+                              className="h-4 w-4 rounded border-purple-300 text-purple-600 focus:ring-purple-500"
+                            />
+                            <span>{option}</span>
+                          </label>
+                        );
+                      })}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onQuickReplySubmit?.(message.quickReplies!.question)
+                        }
+                        className="w-full rounded-full bg-purple-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-purple-700 focus-ring disabled:cursor-not-allowed disabled:opacity-60"
+                        disabled={
+                          !activeQuickReplyQuestion ||
+                          activeQuickReplyQuestion !==
+                            message.quickReplies.question ||
+                          isBusy ||
+                          selectedQuickReplyOptions.length === 0
+                        }
+                      >
+                        Submit selections
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {message.quickReplies.options.map((option) => (
+                        <button
+                          key={option}
+                          type="button"
+                          className="rounded-full border border-purple-200 bg-purple-50 px-4 py-1 text-sm font-medium text-purple-800 transition hover:bg-purple-100 disabled:cursor-not-allowed disabled:opacity-60"
+                          onClick={() =>
+                            onQuickReplySelect?.(
+                              option,
+                              message.quickReplies!.question
+                            )
+                          }
+                          disabled={isBusy}
+                        >
+                          {option}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             {message.role === "assistant" && (

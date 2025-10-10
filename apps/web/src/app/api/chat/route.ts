@@ -53,18 +53,30 @@ type SpreadsheetComfort = "expert" | "familiar" | "novice";
 
 type SkillConfidence = "confident" | "needs-support" | "unsure";
 
+type GedReadiness = "not-ready" | "somewhat-ready" | "refresher";
+
+type GedSubject = "math" | "reading" | "language-mechanics" | "writing";
+
+type KnowledgeQuestionId =
+  | "icd10-purpose"
+  | "medial-meaning"
+  | "hipaa-entities";
+
+type KnowledgeAnswer = {
+  questionId: KnowledgeQuestionId;
+  answer: string;
+  optionIndex: number;
+};
+
 type AnswerSummary = {
   diploma: string;
   spreadsheet: string;
   timeManagement: string;
   communication: string;
   teamwork: string;
-  gedSupport?: string;
-};
-
-type PersonalizedFollowUp = {
-  question: string;
-  answer: string;
+  gedReadiness?: string;
+  gedSubjects?: string;
+  knowledgeAnswers?: KnowledgeAnswer[];
 };
 
 type PlanInputs = {
@@ -73,26 +85,14 @@ type PlanInputs = {
   timeManagement: SkillConfidence;
   communication: SkillConfidence;
   teamwork: SkillConfidence;
-  gedSupportResponse: string | null;
+  gedReadiness: GedReadiness | null;
+  gedSubjects: GedSubject[];
+  knowledgeAnswers: KnowledgeAnswer[];
 };
 
-type PersonalizedQuestionEntry = {
-  number: number;
-  question: string;
-  index: number;
-};
-
-type PersonalizedQuestionState = {
-  planDelivered: boolean;
-  questions: PersonalizedQuestionEntry[];
-  answers: Map<number, { content: string; index: number }>;
-  pendingQuestionNumber: number | null;
-};
-
-type GedSupportState = {
-  asked: boolean;
-  promptIndex: number;
-  answer: { content: string; index: number } | null;
+type ParsedResponse<T> = {
+  entry: { index: number; content: string } | null;
+  value: T | null;
 };
 
 type PlanBlueprint = {
@@ -102,7 +102,6 @@ type PlanBlueprint = {
   certificationIntroLine: string;
   examTopicLines: string[];
   knowledgeAssessmentLine: string;
-  sampleQuestionBlocks: string[];
   recommendedLessonLines: string[];
 };
 
@@ -121,8 +120,17 @@ const EXAM_TOPICS = [
 const KNOWLEDGE_ASSESSMENT_INTRO =
   "CBCS Knowledge Assessment – Use the practice quiz to pinpoint topics for review.";
 
-const SAMPLE_QUESTIONS = [
+type KnowledgeQuestion = {
+  id: KnowledgeQuestionId;
+  prompt: string;
+  options: string[];
+  correctOptionIndex: number;
+  supportLessons: string[];
+};
+
+const KNOWLEDGE_QUESTIONS: KnowledgeQuestion[] = [
   {
+    id: "icd10-purpose",
     prompt:
       "Q1: Billing and coding specialists need to understand the purpose of medical code sets. What is the purpose of ICD-10-CM code?",
     options: [
@@ -131,20 +139,31 @@ const SAMPLE_QUESTIONS = [
       "For reporting outpatient procedures and services healthcare providers perform",
       "For reporting nonphysician supplies, procedures, products, and services provided to Medicare beneficiaries or individuals enrolled in private health insurance programs",
     ],
+    correctOptionIndex: 0,
+    supportLessons: ["Medical Coding Sets"],
   },
   {
+    id: "medial-meaning",
     prompt:
-      "Q2: Medical billing and coding specialists also have to be familiar with medical terminology. What is the meaning of medial?",
+      "Q2: Medical billing and coding specialists also have to be familiar with medical terminology. For example, being able to describe the location of an anatomic site is important for diagnosis and procedural coding. What is the meaning of medial?",
     options: [
       "Toward the middle of the body",
       "Away from the midline of the body",
       "Below",
       "Above",
     ],
+    correctOptionIndex: 0,
+    supportLessons: [
+      "Anatomy and Physiology: Part 1",
+      "Anatomy and Physiology: Part 2",
+      "Anatomy and Physiology: Part 3",
+      "Medical Terminology",
+    ],
   },
   {
+    id: "hipaa-entities",
     prompt:
-      "Q3: Medical billing and coding specialists need to be familiar with HIPAA. Which of the following are covered entities under HIPAA?",
+      "Q3: Medical billing and coding specialists need to be familiar with the Health Insurance Portability and Accountability Act (HIPAA) and do their part to keep patient health information private and secure. Which of the following are covered entities under HIPAA?",
     options: [
       "Health plans",
       "Healthcare clearinghouses",
@@ -152,16 +171,64 @@ const SAMPLE_QUESTIONS = [
       "All of the above",
       "None of the above",
     ],
+    correctOptionIndex: 3,
+    supportLessons: ["Regulatory Compliance"],
   },
 ];
 
-const GED_SUPPORT_QUESTION =
-  "Thanks for letting me know. What's been the hardest part of earning your GED or high-school equivalency so far?";
+const CBCS_ASSESSMENT_INTRO = [
+  "Got it. Thanks for helping me better understand your soft skills needs. To get certified, you will also need to pass a certification test, such as the National Healthcareer Association Certified Coding and Billing Specialist (CBCS) exam.",
+  "The CBCS exam includes questions about the following topics: The Revenue Cycle and Regulatory Compliance, Insurance Eligibility and Other Payer Requirements, Coding and Coding Guidelines, and Billing and Reimbursement.",
+  "",
+  "I’ve pulled together some questions that will help focus your studies for preparing for the CBCS exam. Please answer the questions in this assessment.",
+  "CBCS Knowledge Assessment [User takes exam, which pulls 1-2 drill items each unit in the course. Sample questions follow. Incorrect answer in red.]",
+].join("\n");
 
-const GED_SUPPORT_REMINDER =
-  "Whenever you're ready, let me know what feels most challenging about earning your GED or high-school equivalency so I can match the right lessons.";
+function buildAssessmentIntroWithFirstQuestion(): string {
+  const [firstQuestion] = KNOWLEDGE_QUESTIONS;
 
-const GED_SUPPORT_PROMPTS = [GED_SUPPORT_QUESTION, GED_SUPPORT_REMINDER];
+  if (!firstQuestion) {
+    return CBCS_ASSESSMENT_INTRO;
+  }
+
+  const firstPrompt = buildKnowledgeQuestionPrompt(firstQuestion);
+
+  return [CBCS_ASSESSMENT_INTRO, firstPrompt].join("\n\n");
+}
+
+const GED_MATH_ASSESSMENT_PROMPT = [
+  "I’ve pulled together some questions that will help focus your studies for math. Please answer the questions in this assessment.",
+  "Math Skills Assessment",
+  "Q1: Which of these fractions is in lowest terms?",
+  "A) 2/3",
+  "B) 2/6",
+  "C) 4/8",
+  "D) 5/15",
+  "",
+  "Q2: What is 72 ÷ 5?",
+  "A) 12",
+  "B) 13",
+  "C) 14 R2",
+  "D) 14 R4",
+  "",
+  "Q3: What is 4²?",
+  "A) 2",
+  "B) 8",
+  "C) 12",
+  "D) 16",
+].join("\n");
+
+const GED_READINESS_PROMPT =
+  "How would you rate your readiness to take a high-school equivalency (HSE) exam?\n• I’m not ready. I would need to start with basic academic skills and work my way up to intermediate skills and then high-school skills.\n• I’m somewhat ready. I would need to start with intermediate academic skills and work my way up to high-school level skills.\n• I’m ready, but I would like a refresher of high-school level academic skills.";
+
+const GED_SUBJECTS_PROMPT = [
+  "Which subject area(s) do you feel you need to work on?",
+  "Select all that apply.",
+  "• Math",
+  "• Reading",
+  "• Language Mechanics",
+  "• Writing",
+].join("\n");
 
 const CORE_CBCS_LESSONS = [
   "Certification",
@@ -171,6 +238,41 @@ const CORE_CBCS_LESSONS = [
   "Medical Coding Sets",
   "Billing and Reimbursement",
 ];
+
+function buildKnowledgeQuestionPrompt(question: KnowledgeQuestion): string {
+  const optionLines = question.options.map((option) => `• ${option}`).join("\n");
+  return `${question.prompt}\n${optionLines}`;
+}
+
+function createKnowledgeAnswerParser(
+  question: KnowledgeQuestion
+): (content: string) => { answer: string; optionIndex: number } | null {
+  return (content: string) => {
+    const latestAnswer = extractLatestAnswer(content);
+    const normalizedAnswer = normalizeText(latestAnswer);
+
+    for (let index = 0; index < question.options.length; index += 1) {
+      const option = question.options[index]!;
+      const normalizedOption = normalizeText(option);
+
+      if (normalizedAnswer === normalizedOption) {
+        return { answer: option, optionIndex: index };
+      }
+
+      const optionLetter = String.fromCharCode(65 + index).toLowerCase();
+
+      if (normalizedAnswer === optionLetter) {
+        return { answer: option, optionIndex: index };
+      }
+
+      if (normalizedAnswer.startsWith(`${optionLetter})`)) {
+        return { answer: option, optionIndex: index };
+      }
+    }
+
+    return null;
+  };
+}
 
 const DIGITAL_EXCEL_LESSON =
   "Using Technology to Present Information: Microsoft Excel";
@@ -186,106 +288,70 @@ const COMMUNICATION_LESSONS = ["Listening Skills", "Effective Speaking"];
 const TEAMWORK_LESSONS = ["Teamwork", "Dealing with Supervisors"];
 const SOFT_SKILL_CONFIDENT_LESSON = "Positive Thinking";
 
-type GedKeywordEntry = {
-  focus: string;
-  keywords: RegExp[];
-  lessons: string[];
-};
-
-const GED_KEYWORD_ENTRIES: GedKeywordEntry[] = [
-  {
+const GED_SUBJECT_LESSONS: Record<
+  GedSubject,
+  { focus: string; lessons: string[] }
+> = {
+  math: {
     focus: "math skills",
-    keywords: [
-      /math/,
-      /algebra/,
-      /fraction/,
-      /decimal/,
-      /geometry/,
-      /equation/,
-      /number/,
-      /measurement/,
-    ],
     lessons: [
-      "Introduction to Math Problem Solving",
-      "Understanding Algebra",
-      "Adding and Subtracting Fractions",
-      "Multiplying and Dividing Decimals",
-      "Geometry Basics",
+      "Dividing with a Remainder",
+      "Reducing Fractions to Lowest Terms",
+      "Exponents",
     ],
   },
-  {
+  reading: {
     focus: "reading comprehension",
-    keywords: [/read/, /comprehension/, /story/, /text/, /literature/, /nonfiction/],
     lessons: [
       "Reading for Facts",
-      "Inferences in Reading",
       "Reading Nonfiction",
       "Drawing Conclusions in Reading",
     ],
   },
-  {
-    focus: "writing and grammar",
-    keywords: [/write/, /writing/, /essay/, /grammar/, /punctuation/, /sentence/],
+  "language-mechanics": {
+    focus: "language mechanics",
     lessons: [
-      "Writing an Essay",
-      "Creating an Outline",
       "Capitalization and Punctuation",
       "Common Writing Issues",
+      "Creating an Outline",
     ],
   },
-  {
-    focus: "science vocabulary",
-    keywords: [/science/, /scientific/, /biology/, /chemistry/],
-    lessons: ["Words to Know:  Science", "Understanding Graphs"],
-  },
-  {
-    focus: "social studies vocabulary",
-    keywords: [/social studies/, /history/, /civics/, /government/],
+  writing: {
+    focus: "writing skills",
     lessons: [
-      "Words to Know:  Social Studies",
-      "Reading Historical Documents",
+      "Writing an Essay",
+      "Organization",
+      "Writing Logical Arguments",
     ],
   },
-  {
-    focus: "study skills",
-    keywords: [/study/, /studying/, /focus/, /motivation/, /test/, /exam/],
-    lessons: [
-      "Making the Transition to Career and College Readiness",
-      "Understanding Actions and Results",
-      "Locating Information",
-    ],
-  },
-];
-
-const GED_FALLBACK_LESSONS = [
-  "Making the Transition to Career and College Readiness",
-  "Reading for Facts",
-  "Understanding Algebra",
-  "Locating Information",
-];
+};
 
 const PLAN_OPENING_LINE =
   "Thanks for sharing those details! Here's the Aztec IET guidance for the Certified Billing and Coding Specialist (CBCS) pathway:";
 
-const PERSONALIZED_QUESTION_SYSTEM_PROMPT =
-  "You are Aztec IET's AI advisor helping adult learners pursue the Certified Billing and Coding Specialist (CBCS) credential. Craft concise follow-up questions that gather additional context about their goals, study habits, or support needs. Respond ONLY with valid JSON shaped as {\"question\":\"...\"}. The question must be a single sentence of 25 words or fewer, end with a question mark, and stay focused on the CBCS journey. Avoid repeating topics from previous follow-up questions.";
+const SYSTEM_PROMPT = `You are Aztec IET's AI advisor. Guide adult learners who want to earn the National Healthcareer Association Certified Billing and Coding Specialist (CBCS) credential. Follow Aztec's Integrated Education and Training (IET) model at all times:
+- Blend academic skills, soft skills, and occupational (CBCS) skills. Lessons from these categories should reinforce each other and be contextualized for healthcare billing and coding roles.
+- Emphasize that students without a high-school diploma or equivalency must prepare for and pass the GED/HiSET before attempting the CBCS exam. Support them with GED subject lessons that build toward certification readiness.
+- Recognize that even credentialed learners need strong reading, writing, math, digital literacy, and professional behaviors to succeed with medical records, insurance claims, and patient communication.
+- Reinforce soft skills such as attention to detail, communication, teamwork, time management, professionalism, ethics, adaptability, and stress management. Tie suggestions to billing and coding workflows.
+- Highlight digital literacy expectations: navigating EHR and billing software, using spreadsheets, protecting PHI, researching coding updates, and communicating through secure digital channels.
+- Cover the four CBCS domains: Revenue Cycle and Regulatory Compliance; Insurance Eligibility and Other Payer Requirements; Coding and Coding Guidelines; Billing and Reimbursement.
 
-const FALLBACK_PERSONALIZED_QUESTIONS = [
-  "What type of healthcare setting are you most interested in working in once you earn your CBCS certification?",
-  "Which part of the medical billing or coding process do you feel you need the most practice with right now?",
-  "What kind of study schedule or support system will help you stay consistent while you prepare for the CBCS exam?",
-];
+Conversation guardrails:
+- Keep the focus on the CBCS journey. Do not discuss other pathways beyond acknowledging they are coming soon.
+- Mirror the scripted scenario tone—warm, encouraging, and welcoming. Celebrate strengths, explain next steps clearly, and invite the learner to continue.
+- Use quick-reply style multiple-choice questions exactly where provided in the intake flow and assessments.
+- When referencing assessments, present the supplied question text and answer options verbatim.
+- Never fabricate program requirements or lesson titles outside the provided catalog.
 
-const SYSTEM_PROMPT = `You are Aztec IET's AI advisor supporting adult learners who want to become Certified Billing and Coding Specialists (CBCS). Keep the focus exclusively on the CBCS pathway. When provided with learner responses and recommended focus areas, craft a supportive guidance message that helps them prepare for certification.
-
-Follow these formatting rules exactly:
+Final plan formatting rules:
 1. Open with the sentence: "Thanks for sharing those details! Here's the Aztec IET guidance for the Certified Billing and Coding Specialist (CBCS) pathway:" on its own line.
-2. Include sections titled "Eligibility", "Digital Literacy", "Soft Skill Focus", "Certification Prep Focus", "CBCS Knowledge Assessment", "Sample questions to guide your study", and "Recommended Lessons". Render each section title as a level-3 Markdown heading (for example, \`### Eligibility\`) and separate sections with a blank line.
-3. Under "Certification Prep Focus" list the four CBCS domains exactly as provided. Under "CBCS Knowledge Assessment" reference the provided practice quiz line. Under "Sample questions to guide your study" include each sample question prompt and answer options exactly as provided.
+2. Include sections titled "Eligibility", "Digital Literacy", "Soft Skill Focus", "Certification Prep Focus", "CBCS Knowledge Assessment", and "Recommended Lessons". Render each section title as a level-3 Markdown heading and separate sections with a blank line.
+3. Under "Certification Prep Focus" list the four CBCS domains exactly as provided. Under "CBCS Knowledge Assessment" include the provided practice quiz line, but do not restate the individual assessment questions in the final plan.
 4. Use the supplied guidance notes verbatim whenever they are provided (for example, digital literacy lines, soft skill suggestions, and recommended lessons). You may adjust sentence flow for readability but do not alter the meaning.
-5. When personalized follow-up responses are provided, reference them explicitly in your guidance and tailor the recommended lessons to address the learner's needs. You may introduce new lesson ideas that align with the CBCS pathway when appropriate.
-6. Keep the tone encouraging, actionable, and professional.
-7. Ensure the full response is valid Markdown, using bullet lists and line breaks exactly as supplied in the guidance notes.`;
+5. Maintain a supportive, professional voice that thanks the learner, summarizes their needs, and calls out next steps.
+
+Always return valid Markdown in the final plan.`;
 
 const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1";
 const OPENAI_MODEL = process.env.OPENAI_MODEL ?? "gpt-4o";
@@ -318,17 +384,6 @@ function extractJsonObject<T>(content: string): T {
   }
 
   return JSON.parse(match[0]) as T;
-}
-
-function parsePersonalizedQuestionResponse(content: string): string {
-  const data = extractJsonObject<{ question?: string }>(content);
-  const question = typeof data.question === "string" ? data.question.trim() : "";
-
-  if (!question) {
-    throw new Error("Personalized question response did not include a question field.");
-  }
-
-  return question.endsWith("?") ? question : `${question}?`;
 }
 
 function findPathway(content: string): { id: PathwayId; label: string } | null {
@@ -456,7 +511,7 @@ function findParsedResponse<T>(
   messages: string[],
   startIndex: number,
   parser: (content: string) => T | null
-) {
+): ParsedResponse<T> {
   let lastEntry: { index: number; content: string } | null = null;
 
   for (let index = startIndex + 1; index < messages.length; index += 1) {
@@ -470,16 +525,118 @@ function findParsedResponse<T>(
     const parsedValue = parser(content);
 
     if (parsedValue !== null) {
-      return { entry: lastEntry, value: parsedValue } as const;
+      return { entry: lastEntry, value: parsedValue };
     }
   }
 
-  return { entry: lastEntry, value: null } as const;
+  return { entry: lastEntry, value: null };
 }
 
-function extractGedSupportState(messages: ChatMessage[]): GedSupportState {
-  let promptIndex = -1;
+function parseGedReadiness(content: string): GedReadiness | null {
+  const normalized = normalizeText(content);
 
+  if (/not\s+ready/.test(normalized)) {
+    return "not-ready";
+  }
+
+  if (/somewhat\s+ready/.test(normalized) || /intermediate/.test(normalized)) {
+    return "somewhat-ready";
+  }
+
+  if (/ready/.test(normalized) && /refresher/.test(normalized)) {
+    return "refresher";
+  }
+
+  return null;
+}
+
+function parseGedSubjects(content: string): GedSubject[] | null {
+  const segments = getAnswerSegments(content);
+  const selections = new Set<GedSubject>();
+
+  const evaluate = (value: string) => {
+    const normalized = normalizeText(value);
+
+    if (/math/.test(normalized) || /numbers?/.test(normalized)) {
+      selections.add("math");
+    }
+
+    if (/reading/.test(normalized) || /literacy/.test(normalized)) {
+      selections.add("reading");
+    }
+
+    if (/language/.test(normalized) || /mechanics/.test(normalized) || /grammar/.test(normalized)) {
+      selections.add("language-mechanics");
+    }
+
+    if (/writing/.test(normalized) || /essays?/.test(normalized)) {
+      selections.add("writing");
+    }
+  };
+
+  if (segments.length === 0) {
+    evaluate(content);
+  } else {
+    segments.forEach(evaluate);
+  }
+
+  return selections.size > 0 ? Array.from(selections) : null;
+}
+
+function selectGedAcademicSupport(
+  subjects: GedSubject[]
+): { lessons: string[]; focusHint: string | null } {
+  const uniqueSubjects = Array.from(new Set(subjects));
+
+  if (uniqueSubjects.length === 0) {
+    return { lessons: [], focusHint: null };
+  }
+
+  const lessons = new Set<string>();
+  let focusHint: string | null = null;
+
+  for (const subject of uniqueSubjects) {
+    const entry = GED_SUBJECT_LESSONS[subject];
+
+    if (!entry) {
+      continue;
+    }
+
+    entry.lessons.forEach((lesson) => lessons.add(lesson));
+
+    if (!focusHint) {
+      focusHint = entry.focus;
+    }
+  }
+
+  return { lessons: Array.from(lessons), focusHint };
+}
+
+function buildGedAssessmentPrompt(subjects: GedSubject[]): string {
+  if (subjects.includes("math")) {
+    return GED_MATH_ASSESSMENT_PROMPT;
+  }
+
+  const subjectNames = subjects
+    .map((subject) => {
+      if (subject === "language-mechanics") {
+        return "language mechanics";
+      }
+
+      return subject;
+    })
+    .join(", ");
+
+  return [
+    `I’ve pulled together some reflection questions to support your ${subjectNames} practice.`,
+    "Let me know what feels most challenging so I can match specific lessons.",
+  ].join("\n");
+}
+
+function findAssistantMessageIndex(
+  messages: ChatMessage[],
+  content: string
+): number {
   for (let index = 0; index < messages.length; index += 1) {
     const message = messages[index];
 
@@ -487,73 +644,29 @@ function extractGedSupportState(messages: ChatMessage[]): GedSupportState {
       continue;
     }
 
-    const trimmed = message.content.trim();
-
-    if (
-      trimmed.length > 0 &&
-      GED_SUPPORT_PROMPTS.some((prompt) => trimmed.includes(prompt))
-    ) {
-      promptIndex = index;
+    if (message.content.includes(content)) {
+      return index;
     }
   }
 
-  if (promptIndex === -1) {
-    return { asked: false, promptIndex: -1, answer: null };
-  }
-
-  for (let index = promptIndex + 1; index < messages.length; index += 1) {
-    const message = messages[index];
-
-    if (message.role !== "user") {
-      continue;
-    }
-
-    const trimmed = message.content.trim();
-
-    if (trimmed.length === 0) {
-      continue;
-    }
-
-    return {
-      asked: true,
-      promptIndex,
-      answer: { content: trimmed, index },
-    };
-  }
-
-  return { asked: true, promptIndex, answer: null };
+  return -1;
 }
 
-function selectAcademicSupport(response: string | null): {
-  lessons: string[];
-  focusHint: string | null;
-} {
-  if (!response) {
-    return { lessons: GED_FALLBACK_LESSONS, focusHint: null };
-  }
+function hasUserReplyAfterIndex(
+  messages: ChatMessage[],
+  startIndex: number
+): boolean {
+  for (let index = startIndex + 1; index < messages.length; index += 1) {
+    if (messages[index]?.role === "user") {
+      const trimmed = messages[index]!.content.trim();
 
-  const normalized = response.toLowerCase();
-  const selections = new Set<string>();
-  let focusHint: string | null = null;
-
-  for (const entry of GED_KEYWORD_ENTRIES) {
-    if (entry.keywords.some((pattern) => pattern.test(normalized))) {
-      entry.lessons.forEach((lesson) => selections.add(lesson));
-
-      if (!focusHint) {
-        focusHint = entry.focus;
+      if (trimmed.length > 0) {
+        return true;
       }
     }
   }
 
-  if (selections.size === 0) {
-    GED_FALLBACK_LESSONS.forEach((lesson) => selections.add(lesson));
-  }
-
-  return {
-    lessons: Array.from(selections).slice(0, 6),
-    focusHint,
-  };
+  return false;
 }
 
 function selectDigitalLessons(spreadsheetComfort: SpreadsheetComfort): string[] {
@@ -619,252 +732,7 @@ function formatLessonGroup(label: string, lessons: string[]): string | null {
   return `- ${label}\n  ${lessonLines}`;
 }
 
-const PERSONALIZED_QUESTION_INTROS = [
-  "Thanks for sharing those readiness insights! I have a few personalized questions to tailor your CBCS study plan.",
-  "Great details so far—let's build on them with another follow-up.",
-  "I appreciate everything you've shared. Here's one last question to lock in your study plan.",
-];
 
-const PERSONALIZED_QUESTION_HEADERS = [
-  "Here's the first follow-up question:",
-  "Here's another follow-up to explore:",
-  "Final follow-up question:",
-];
-
-const PERSONALIZED_QUESTION_CLOSINGS = [
-  "Share whatever comes to mind—every detail helps me shape your study plan.",
-  "Your response helps me connect you with the right resources.",
-  "Your answer will help me finalize the lesson recommendations.",
-];
-
-const PERSONALIZED_REMINDER_INTROS = [
-  "Just circling back to that first follow-up question whenever you're ready.",
-  "Thanks for your patience—I'm still curious about this follow-up.",
-  "Before we wrap up, could you share your thoughts on this last follow-up question?",
-];
-
-const PERSONALIZED_REMINDER_CLOSINGS = [
-  "Anything you share will help me tailor the CBCS resources.",
-  "Even a quick note will help me fine-tune the suggestions.",
-  "Once I have your answer, I'll send over the lesson plan.",
-];
-
-function getPersonalizedCopy(
-  source: string[],
-  number: number,
-  fallback: string
-): string {
-  return source[number - 1] ?? fallback;
-}
-
-function formatPersonalizedQuestionMessage(
-  number: number,
-  question: string
-): string {
-  const intro = getPersonalizedCopy(
-    PERSONALIZED_QUESTION_INTROS,
-    number,
-    PERSONALIZED_QUESTION_INTROS[0]!
-  );
-  const header = getPersonalizedCopy(
-    PERSONALIZED_QUESTION_HEADERS,
-    number,
-    "Here's a follow-up question:"
-  );
-  const closing = getPersonalizedCopy(
-    PERSONALIZED_QUESTION_CLOSINGS,
-    number,
-    PERSONALIZED_QUESTION_CLOSINGS[PERSONALIZED_QUESTION_CLOSINGS.length - 1]!
-  );
-
-  return [intro, `${header} ${question}`, closing].join("\n\n");
-}
-
-function formatPendingPersonalizedQuestion(
-  number: number,
-  question: string
-): string {
-  const reminderIntro = getPersonalizedCopy(
-    PERSONALIZED_REMINDER_INTROS,
-    number,
-    PERSONALIZED_REMINDER_INTROS[0]!
-  );
-  const header = getPersonalizedCopy(
-    PERSONALIZED_QUESTION_HEADERS,
-    number,
-    "Here's a follow-up question:"
-  );
-  const reminderClosing = getPersonalizedCopy(
-    PERSONALIZED_REMINDER_CLOSINGS,
-    number,
-    PERSONALIZED_REMINDER_CLOSINGS[PERSONALIZED_REMINDER_CLOSINGS.length - 1]!
-  );
-
-  return [
-    reminderIntro,
-    `${header} ${question}`,
-    reminderClosing,
-  ].join("\n\n");
-}
-
-function extractPersonalizedQuestionState(
-  messages: ChatMessage[]
-): PersonalizedQuestionState {
-  const questions: PersonalizedQuestionEntry[] = [];
-  let planIndex = -1;
-
-  for (let index = 0; index < messages.length; index += 1) {
-    const message = messages[index];
-
-    if (message.role === "assistant") {
-      if (planIndex === -1 && message.content.includes(PLAN_OPENING_LINE)) {
-        planIndex = index;
-      }
-
-      const questionLine = message.content
-        .split("\n")
-        .map((line) => line.trim())
-        .find((line) => {
-          return PERSONALIZED_QUESTION_HEADERS.some((header) =>
-            line.toLowerCase().startsWith(header.toLowerCase())
-          );
-        });
-
-      if (questionLine) {
-        const matchIndex = PERSONALIZED_QUESTION_HEADERS.findIndex((header) =>
-          questionLine.toLowerCase().startsWith(header.toLowerCase())
-        );
-
-        if (matchIndex !== -1) {
-          const header = PERSONALIZED_QUESTION_HEADERS[matchIndex]!;
-          const question = questionLine.slice(header.length).trim();
-
-          if (question.length > 0) {
-            questions.push({
-              number: matchIndex + 1,
-              question,
-              index,
-            });
-          }
-        }
-      }
-    }
-  }
-
-  questions.sort((a, b) => a.number - b.number);
-
-  const answers = new Map<number, { content: string; index: number }>();
-
-  for (let qIndex = 0; qIndex < questions.length; qIndex += 1) {
-    const question = questions[qIndex];
-    let limitIndex = messages.length;
-    const nextQuestion = questions[qIndex + 1];
-
-    if (nextQuestion) {
-      limitIndex = Math.min(limitIndex, nextQuestion.index);
-    }
-
-    if (planIndex !== -1 && planIndex > question.index) {
-      limitIndex = Math.min(limitIndex, planIndex);
-    }
-
-    for (let index = question.index + 1; index < limitIndex; index += 1) {
-      const message = messages[index];
-
-      if (message.role !== "user") {
-        continue;
-      }
-
-      const trimmed = message.content.trim();
-
-      if (trimmed.length === 0) {
-        continue;
-      }
-
-      answers.set(question.number, { content: trimmed, index });
-      break;
-    }
-  }
-
-  let pendingQuestionNumber: number | null = null;
-
-  for (const question of questions) {
-    if (!answers.has(question.number)) {
-      pendingQuestionNumber = question.number;
-      break;
-    }
-  }
-
-  return {
-    planDelivered: planIndex !== -1,
-    questions,
-    answers,
-    pendingQuestionNumber,
-  };
-}
-
-async function generatePersonalizedQuestion({
-  number,
-  answers,
-  followUps,
-}: {
-  number: number;
-  answers: AnswerSummary;
-  followUps: PersonalizedFollowUp[];
-}): Promise<string> {
-  const fallback =
-    FALLBACK_PERSONALIZED_QUESTIONS[number - 1] ??
-    FALLBACK_PERSONALIZED_QUESTIONS[FALLBACK_PERSONALIZED_QUESTIONS.length - 1];
-
-  const followUpSummary = followUps.length
-    ? followUps
-        .map(
-          (entry, index) =>
-            `Follow-up ${index + 1}: ${entry.question}\nLearner response: ${entry.answer}`
-        )
-        .join("\n\n")
-    : "No follow-up questions have been answered yet.";
-
-  const userPrompt = [
-    `Prepare Personalized Question ${number} for a CBCS learner.`,
-    "",
-    "Learner intake responses:",
-    `- High-school credential status: ${answers.diploma}`,
-    `- Spreadsheet comfort level: ${answers.spreadsheet}`,
-    `- Time-management outlook: ${answers.timeManagement}`,
-    `- Communication outlook: ${answers.communication}`,
-    `- Teamwork outlook: ${answers.teamwork}`,
-    "",
-    "Previously asked follow-up exchanges:",
-    followUpSummary,
-    "",
-    `Return JSON with the next question only.`,
-  ].join("\n");
-
-  try {
-    const response = await callOpenAi([
-      { role: "system", content: PERSONALIZED_QUESTION_SYSTEM_PROMPT },
-      { role: "user", content: userPrompt },
-    ]);
-
-    let question = parsePersonalizedQuestionResponse(response);
-
-    if (question.length > 220) {
-      question = `${question.slice(0, 217).trimEnd()}...?`;
-    }
-
-    const normalized = question.toLowerCase();
-
-    if (followUps.some((entry) => entry.question.toLowerCase() === normalized)) {
-      return fallback;
-    }
-
-    return question;
-  } catch (error) {
-    console.error("Failed to generate personalized question:", error);
-    return fallback;
-  }
-}
 
 function formatSoftSkillRecommendations(
   timeManagement: SkillConfidence,
@@ -914,14 +782,22 @@ function formatSoftSkillRecommendations(
 
 function getEligibilityLine(
   hasDiploma: boolean,
-  focusHint: string | null
+  focusHint: string | null,
+  gedReadiness: GedReadiness | null
 ): string {
   if (hasDiploma) {
     return "- You already meet the high school requirement—great work checking that box.";
   }
 
   if (focusHint) {
-    return `- Plan time to finish your high-school equivalency (GED/HiSET) so you can sit for the CBCS exam. We'll target your ${focusHint} with GED lessons in the plan below.`;
+    const readinessPhrase =
+      gedReadiness === "refresher"
+        ? `a refresher in ${focusHint}`
+        : gedReadiness === "somewhat-ready"
+        ? `intermediate-to-advanced practice for ${focusHint}`
+        : `foundational lessons in ${focusHint}`;
+
+    return `- Plan time to finish your high-school equivalency (GED/HiSET) so you can sit for the CBCS exam. We'll build ${readinessPhrase} as you work through the lessons below.`;
   }
 
   return "- Plan time to finish your high-school equivalency (GED/HiSET) so you can sit for the CBCS exam. Let me know which GED topics feel toughest so I can match lessons.";
@@ -947,15 +823,40 @@ function getDigitalLiteracyLine(
   return "- Keep practicing spreadsheet workflows to manage claims, denials, and study notes—your Excel skills are a real asset.";
 }
 
+function selectKnowledgeLessonBoosts(
+  knowledgeAnswers: KnowledgeAnswer[]
+): string[] {
+  const boosts = new Set<string>();
+
+  for (const response of knowledgeAnswers) {
+    const question = KNOWLEDGE_QUESTIONS.find(
+      (entry) => entry.id === response.questionId
+    );
+
+    if (!question) {
+      continue;
+    }
+
+    if (response.optionIndex !== question.correctOptionIndex) {
+      question.supportLessons.forEach((lesson) => boosts.add(lesson));
+    }
+  }
+
+  return Array.from(boosts);
+}
+
 function getRecommendedLessonLines(
   spreadsheetComfort: SpreadsheetComfort,
   digitalLessons: string[],
   softSkillLessons: string[],
-  academicSupport: { lessons: string[] } | null
+  academicSupport: { lessons: string[] } | null,
+  knowledgeBoosts: string[]
 ): string[] {
   const lines: (string | null)[] = [];
 
-  lines.push(formatLessonGroup("CBCS Certification Prep", CORE_CBCS_LESSONS));
+  const cbcsLessons = [...knowledgeBoosts, ...CORE_CBCS_LESSONS];
+
+  lines.push(formatLessonGroup("CBCS Certification Prep", cbcsLessons));
 
   lines.push(
     formatLessonGroup(
@@ -987,12 +888,14 @@ function buildPlanBlueprint(inputs: PlanInputs): PlanBlueprint {
     timeManagement,
     communication,
     teamwork,
-    gedSupportResponse,
+    gedReadiness,
+    gedSubjects,
+    knowledgeAnswers,
   } = inputs;
 
   const academicSupport = hasDiploma
     ? null
-    : selectAcademicSupport(gedSupportResponse);
+    : selectGedAcademicSupport(gedSubjects);
   const digitalLessons = selectDigitalLessons(spreadsheetComfort);
   const softSkillLessons = selectSoftSkillLessons(
     timeManagement,
@@ -1002,7 +905,8 @@ function buildPlanBlueprint(inputs: PlanInputs): PlanBlueprint {
 
   const eligibilityLine = getEligibilityLine(
     hasDiploma,
-    academicSupport?.focusHint ?? null
+    academicSupport?.focusHint ?? null,
+    gedReadiness
   );
   const digitalLiteracyLine = getDigitalLiteracyLine(
     spreadsheetComfort,
@@ -1019,17 +923,13 @@ function buildPlanBlueprint(inputs: PlanInputs): PlanBlueprint {
 
   const examTopicLines = EXAM_TOPICS.map((topic) => `- ${topic}`);
   const knowledgeAssessmentLine = `- ${KNOWLEDGE_ASSESSMENT_INTRO}`;
-  const sampleQuestionBlocks = SAMPLE_QUESTIONS.map((question) => {
-    const optionLines = question.options
-      .map((option, index) => `${String.fromCharCode(65 + index)}) ${option}`)
-      .join("\n");
-    return `${question.prompt}\n${optionLines}`;
-  });
+  const knowledgeBoosts = selectKnowledgeLessonBoosts(knowledgeAnswers);
   const recommendedLessonLines = getRecommendedLessonLines(
     spreadsheetComfort,
     digitalLessons,
     softSkillLessons,
-    academicSupport
+    academicSupport,
+    knowledgeBoosts
   );
 
   return {
@@ -1039,7 +939,6 @@ function buildPlanBlueprint(inputs: PlanInputs): PlanBlueprint {
     certificationIntroLine,
     examTopicLines,
     knowledgeAssessmentLine,
-    sampleQuestionBlocks,
     recommendedLessonLines,
   };
 }
@@ -1053,7 +952,6 @@ function buildStaticPlan(inputs: PlanInputs): string {
     ...blueprint.examTopicLines,
   ].join("\n");
 
-  const sampleQuestionContent = blueprint.sampleQuestionBlocks.join("\n\n");
   const recommendedLessonContent = blueprint.recommendedLessonLines.join("\n");
 
   return [
@@ -1063,7 +961,6 @@ function buildStaticPlan(inputs: PlanInputs): string {
     `### Soft Skill Focus\n${softSkillContent}`,
     `### Certification Prep Focus\n${certificationContent}`,
     `### CBCS Knowledge Assessment\n${blueprint.knowledgeAssessmentLine}`,
-    `### Sample questions to guide your study\n${sampleQuestionContent}`,
     `### Recommended Lessons\n${recommendedLessonContent}`,
   ].join("\n\n");
 }
@@ -1107,10 +1004,10 @@ async function callOpenAi(messages: OpenAiMessage[]): Promise<string> {
 }
 
 async function generateCbcsPlan(
-  inputs: PlanInputs & { answers: AnswerSummary; followUps: PersonalizedFollowUp[] }
+  inputs: PlanInputs & { answers: AnswerSummary }
 ): Promise<string> {
   const blueprint = buildPlanBlueprint(inputs);
-  const { answers, followUps } = inputs;
+  const { answers } = inputs;
   const lessonCatalog = formatLessonCatalog();
 
   const answerSummaryLines = [
@@ -1121,10 +1018,47 @@ async function generateCbcsPlan(
     `5. How do you feel about your ability to work with others?\n   Answer: ${answers.teamwork}`,
   ];
 
-  if (!inputs.hasDiploma && answers.gedSupport) {
-    answerSummaryLines.push(
-      `6. What feels hardest about finishing your GED or high-school equivalency?\n   Answer: ${answers.gedSupport}`
-    );
+  if (!inputs.hasDiploma) {
+    if (answers.gedReadiness) {
+      answerSummaryLines.push(
+        `6. GED readiness level\n   Answer: ${answers.gedReadiness}`
+      );
+    }
+
+    if (answers.gedSubjects) {
+      answerSummaryLines.push(
+        `${answers.gedReadiness ? "7" : "6"}. GED subject priorities\n   Answer: ${answers.gedSubjects}`
+      );
+    }
+  }
+
+  if (answers.knowledgeAnswers?.length) {
+    let counter = answerSummaryLines.length + 1;
+
+    for (const response of answers.knowledgeAnswers) {
+      const question = KNOWLEDGE_QUESTIONS.find(
+        (entry) => entry.id === response.questionId
+      );
+
+      if (!question) {
+        continue;
+      }
+
+      const isCorrect =
+        response.optionIndex === question.correctOptionIndex;
+      const correctAnswer =
+        question.options[question.correctOptionIndex] ?? "";
+      const answerLineParts = [`Answer: ${response.answer}`];
+
+      if (!isCorrect && correctAnswer) {
+        answerLineParts.push(`Correct answer: ${correctAnswer}`);
+      }
+
+      answerSummaryLines.push(
+        `${counter}. ${question.prompt}\n   ${answerLineParts.join(" | ")}`
+      );
+      counter += 1;
+    }
   }
 
   const answerSummary = answerSummaryLines.join("\n");
@@ -1139,22 +1073,42 @@ async function generateCbcsPlan(
 
   if (!inputs.hasDiploma) {
     normalizedInterpretationLines.push(
-      `- GED support focus: ${
-        answers.gedSupport ?? "Learner will share more details."
+      `- GED readiness level: ${inputs.gedReadiness ?? "Not captured"}`,
+      `- GED subject priorities: ${
+        inputs.gedSubjects.length > 0
+          ? inputs.gedSubjects.join(", ")
+          : "Not captured"
       }`
     );
   }
 
-  const normalizedInterpretation = normalizedInterpretationLines.join("\n");
+  for (const response of inputs.knowledgeAnswers) {
+    const question = KNOWLEDGE_QUESTIONS.find(
+      (entry) => entry.id === response.questionId
+    );
 
-  const followUpSummary = followUps.length
-    ? followUps
-        .map(
-          (entry, index) =>
-            `Follow-up ${index + 1}: ${entry.question}\nLearner response: ${entry.answer}`
-        )
-        .join("\n\n")
-    : "No personalized follow-up responses were provided.";
+    if (!question) {
+      continue;
+    }
+
+    const correctAnswer = question.options[question.correctOptionIndex] ?? "";
+    const status =
+      response.optionIndex === question.correctOptionIndex
+        ? "Correct"
+        : "Needs review";
+
+    const parts = [
+      `Learner answered: ${response.answer}`,
+      correctAnswer ? `Correct answer: ${correctAnswer}` : null,
+      `Result: ${status}`,
+    ].filter((part): part is string => Boolean(part));
+
+    normalizedInterpretationLines.push(
+      `- ${question.prompt} -> ${parts.join(" | ")}`
+    );
+  }
+
+  const normalizedInterpretation = normalizedInterpretationLines.join("\n");
 
   const guidanceNotes = [
     `Eligibility bullet:\n${blueprint.eligibilityLine}`,
@@ -1165,7 +1119,6 @@ async function generateCbcsPlan(
       ...blueprint.examTopicLines,
     ].join("\n")}`,
     `CBCS knowledge assessment bullet:\n${blueprint.knowledgeAssessmentLine}`,
-    `Sample questions (prompt followed by options):\n${blueprint.sampleQuestionBlocks.join("\n\n")}`,
     `Recommended lessons:\n${blueprint.recommendedLessonLines.join("\n")}`,
   ].join("\n\n");
 
@@ -1181,9 +1134,6 @@ async function generateCbcsPlan(
     "",
     "Use the following guidance notes exactly as written when drafting your response (they already reflect the correct phrasing):",
     guidanceNotes,
-    "",
-    "Personalized follow-up context to reference in your guidance:",
-    followUpSummary,
     "",
     "Remember to keep the focus exclusively on the Certified Billing and Coding Specialist (CBCS) pathway and follow the formatting rules in the system prompt.",
   ].join("\n");
@@ -1205,17 +1155,17 @@ async function getAssistantReply(messages: ChatMessage[]): Promise<string> {
     .map((message) => message.content);
 
   if (userMessages.length === 0) {
-    return "Hi there! Choose one of the pathway buttons to get started, or tell me which certification you want to explore.";
+    return "Hello and welcome! I’m excited to help you map out your Certified Billing and Coding Specialist journey. Tap one of the pathway buttons to get started, or let me know which certification you’re curious about.";
   }
 
   const { pathway, index: pathwayIndex } = getFirstPathwayChoice(userMessages);
 
   if (!pathway) {
-    return "I didn't catch which pathway you want to explore. Tap one of the pathway buttons above—CBCS, Pharmacy Technician, CCMA, or CMAA—to continue.";
+    return "I didn’t quite catch which pathway you’d like to explore. Try tapping one of the pathway buttons above—CBCS is ready now, and the others are coming soon.";
   }
 
   if (pathway.id !== "cbcs") {
-    return `${pathway.label} guidance is coming soon in this demo. For now, pick "Certified Billing and Coding Specialist (CBCS)" to walk through the scripted experience.`;
+    return `Thanks for your interest in the ${pathway.label}! That guidance is coming soon in this demo. For now, choose "Certified Billing and Coding Specialist (CBCS)" so I can walk you through the full experience.`;
   }
 
   const diplomaResult = findParsedResponse(
@@ -1234,15 +1184,47 @@ async function getAssistantReply(messages: ChatMessage[]): Promise<string> {
     return "Just a quick check—do you currently have a high-school diploma or high-school equivalency (GED/HiSET)?\n• Yes\n• No";
   }
 
-  const gedSupportState = extractGedSupportState(messages);
+  let gedReadinessResult: ParsedResponse<GedReadiness> | null = null;
+  let gedSubjectsResult: ParsedResponse<GedSubject[]> | null = null;
 
   if (!hasDiploma) {
-    if (!gedSupportState.asked) {
-      return GED_SUPPORT_QUESTION;
+    gedReadinessResult = findParsedResponse(
+      userMessages,
+      diplomaResult.entry.index,
+      parseGedReadiness
+    );
+
+    if (!gedReadinessResult.entry) {
+      return GED_READINESS_PROMPT;
     }
 
-    if (!gedSupportState.answer) {
-      return GED_SUPPORT_REMINDER;
+    const gedReadinessValue = gedReadinessResult.value;
+
+    if (!gedReadinessValue) {
+      return "Could you pick the option that best matches your GED readiness so I can recommend the right lessons?\n• I’m not ready. I would need to start with basic academic skills and work my way up to intermediate skills and then high-school skills.\n• I’m somewhat ready. I would need to start with intermediate academic skills and work my way up to high-school level skills.\n• I’m ready, but I would like a refresher of high-school level academic skills.";
+    }
+
+    gedSubjectsResult = findParsedResponse(
+      userMessages,
+      gedReadinessResult.entry.index,
+      parseGedSubjects
+    );
+
+    if (!gedSubjectsResult.entry) {
+      return GED_SUBJECTS_PROMPT;
+    }
+
+    const gedSubjectsValue = gedSubjectsResult.value;
+
+    if (!gedSubjectsValue || gedSubjectsValue.length === 0) {
+      return [
+        "Which GED subject areas should we focus on right now?",
+        "Select all that apply.",
+        "• Math",
+        "• Reading",
+        "• Language Mechanics",
+        "• Writing",
+      ].join("\n");
     }
   }
 
@@ -1295,7 +1277,7 @@ async function getAssistantReply(messages: ChatMessage[]): Promise<string> {
   const communication = communicationResult.value;
 
   if (!communication) {
-    return "Please let me know which option fits your communication skills.\n• I have good communication skills.\n• I could use some suggestions for improving communication skills.\n• I’m not sure what communication skills are.";
+    return "Please let me know which option fits your communication skills best?\n• I have good communication skills.\n• I could use some suggestions for improving communication skills.\n• I’m not sure what communication skills are.";
   }
 
   const teamworkResult = findParsedResponse(
@@ -1311,7 +1293,7 @@ async function getAssistantReply(messages: ChatMessage[]): Promise<string> {
   const teamwork = teamworkResult.value;
 
   if (!teamwork) {
-    return "Please choose the option that best describes how you work with others.\n• I work well with others and feel confident in my skills in this area.\n• I could use some suggestions for improving how I work with others.\n• I’m not sure what skills are related to working well with others.";
+    return "Please choose the option that best describes how you work with others?\n• I work well with others and feel confident in my skills in this area.\n• I could use some suggestions for improving how I work with others.\n• I’m not sure what skills are related to working well with others.";
   }
 
   const answers: AnswerSummary = {
@@ -1322,65 +1304,92 @@ async function getAssistantReply(messages: ChatMessage[]): Promise<string> {
     teamwork: extractLatestAnswer(teamworkResult.entry.content),
   };
 
-  if (!hasDiploma && gedSupportState.answer) {
-    answers.gedSupport = gedSupportState.answer.content;
-  }
-
-  const personalizedState = extractPersonalizedQuestionState(messages);
-
-  if (personalizedState.planDelivered) {
-    return "Happy to help! Let me know whenever you want more resources or practice questions.";
-  }
-
-  const answeredFollowUps = personalizedState.questions
-    .map((question) => {
-      const answerEntry = personalizedState.answers.get(question.number);
-
-      if (!answerEntry) {
-        return null;
-      }
-
-      return {
-        question: question.question,
-        answer: answerEntry.content,
-      } as PersonalizedFollowUp;
-    })
-    .filter((entry): entry is PersonalizedFollowUp => entry !== null)
-    .slice(0, 3);
+  let gedReadiness: GedReadiness | null = null;
+  let gedSubjects: GedSubject[] = [];
 
   if (
-    personalizedState.pendingQuestionNumber !== null &&
-    personalizedState.pendingQuestionNumber <= 3
+    !hasDiploma &&
+    gedReadinessResult?.entry &&
+    gedSubjectsResult?.entry
   ) {
-    const pendingQuestion = personalizedState.questions.find(
-      (question) => question.number === personalizedState.pendingQuestionNumber
+    gedReadiness = gedReadinessResult.value;
+    gedSubjects = gedSubjectsResult.value ?? [];
+    answers.gedReadiness = extractLatestAnswer(
+      gedReadinessResult.entry.content
+    );
+    answers.gedSubjects = extractLatestAnswer(
+      gedSubjectsResult.entry.content
+    );
+  }
+
+  const knowledgeAnswers: KnowledgeAnswer[] = [];
+
+  if (!hasDiploma && gedSubjects.length > 0 && gedSubjects.includes("math")) {
+    const assessmentPrompt = buildGedAssessmentPrompt(gedSubjects);
+    const assessmentIndex = findAssistantMessageIndex(messages, assessmentPrompt);
+
+    if (
+      assessmentIndex === -1 ||
+      !hasUserReplyAfterIndex(messages, assessmentIndex)
+    ) {
+      return assessmentPrompt;
+    }
+  }
+
+  const introIndex = findAssistantMessageIndex(
+    messages,
+    CBCS_ASSESSMENT_INTRO
+  );
+
+  if (introIndex === -1) {
+    return buildAssessmentIntroWithFirstQuestion();
+  }
+
+  let lastUserIndex = teamworkResult.entry.index;
+
+  for (const question of KNOWLEDGE_QUESTIONS) {
+    const prompt = buildKnowledgeQuestionPrompt(question);
+    const assistantIndex = findAssistantMessageIndex(messages, prompt);
+
+    if (assistantIndex === -1) {
+      return prompt;
+    }
+
+    if (!hasUserReplyAfterIndex(messages, assistantIndex)) {
+      return prompt;
+    }
+
+    const result = findParsedResponse(
+      userMessages,
+      lastUserIndex,
+      createKnowledgeAnswerParser(question)
     );
 
-    if (pendingQuestion) {
-      return formatPendingPersonalizedQuestion(
-        pendingQuestion.number,
-        pendingQuestion.question
-      );
+    if (!result.entry) {
+      return prompt;
     }
+
+    const parsed = result.value;
+
+    if (!parsed) {
+      return [
+        "Thanks for sticking with me! Please choose one of the answer choices so I can tailor the CBCS study plan.",
+        prompt,
+      ].join("\n");
+    }
+
+    knowledgeAnswers.push({
+      questionId: question.id,
+      answer: parsed.answer,
+      optionIndex: parsed.optionIndex,
+    });
+
+    lastUserIndex = result.entry.index;
   }
 
-  if (answeredFollowUps.length < 3) {
-    const nextQuestionNumber = answeredFollowUps.length + 1;
-
-    if (nextQuestionNumber <= 3) {
-      const questionText = await generatePersonalizedQuestion({
-        number: nextQuestionNumber,
-        answers,
-        followUps: answeredFollowUps,
-      });
-
-      return formatPersonalizedQuestionMessage(nextQuestionNumber, questionText);
-    }
+  if (knowledgeAnswers.length > 0) {
+    answers.knowledgeAnswers = knowledgeAnswers;
   }
-
-  const gedSupportResponse = !hasDiploma
-    ? gedSupportState.answer?.content ?? null
-    : null;
 
   return await generateCbcsPlan({
     hasDiploma,
@@ -1388,9 +1397,10 @@ async function getAssistantReply(messages: ChatMessage[]): Promise<string> {
     timeManagement,
     communication,
     teamwork,
-    gedSupportResponse,
+    gedReadiness,
+    gedSubjects,
+    knowledgeAnswers,
     answers,
-    followUps: answeredFollowUps.slice(0, 3),
   });
 }
 

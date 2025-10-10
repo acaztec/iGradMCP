@@ -51,15 +51,56 @@ function parseAssistantMessage(content: string): {
 
       if (trimmedLine.length > 0) {
         const questionCandidate = trimmedLine.replace(/[”"]+$/, "");
+        const questionMarkIndex = questionCandidate.indexOf("?");
+        const hasQuestionMark = questionMarkIndex !== -1;
 
-        if (questionCandidate.endsWith("?") && !/^Q\d+:/i.test(questionCandidate)) {
+        if (hasQuestionMark) {
+          const questionText = questionCandidate
+            .slice(0, questionMarkIndex + 1)
+            .trim();
+          const trailingText = questionCandidate
+            .slice(questionMarkIndex + 1)
+            .trim();
+          const helperLineRegex = /select all that apply|check all that apply/i;
+
+          let selectionMode: QuickReply["selectionMode"] = "single";
+          const helperSegments: string[] = [];
+
+          if (trailingText.length > 0) {
+            helperSegments.push(trailingText);
+
+            if (helperLineRegex.test(trailingText)) {
+              selectionMode = "multiple";
+            }
+          }
+
           const options: string[] = [];
+          const helperLinesFromMessage: string[] = [];
           let optionIndex = index + 1;
 
           while (optionIndex < lines.length) {
-            const optionLine = lines[optionIndex].trim();
+            const optionLineRaw = lines[optionIndex];
+            const optionLine = optionLineRaw.trim();
+
+            if (optionLine.length === 0) {
+              if (options.length > 0) {
+                optionIndex += 1;
+                break;
+              }
+
+              optionIndex += 1;
+              continue;
+            }
 
             if (!optionLine.startsWith("•")) {
+              if (helperLineRegex.test(optionLine)) {
+                helperSegments.push(optionLine);
+                helperLinesFromMessage.push(optionLineRaw);
+                selectionMode = "multiple";
+                optionIndex += 1;
+                continue;
+              }
+
               break;
             }
 
@@ -72,17 +113,76 @@ function parseAssistantMessage(content: string): {
             optionIndex += 1;
           }
 
+          const normalizedHelperSegments = helperSegments
+            .map((segment) => segment.trim())
+            .filter(Boolean);
+          const uniqueHelperSegments = Array.from(
+            new Set(normalizedHelperSegments)
+          );
+          const combinedHelperText =
+            uniqueHelperSegments.join(" ") || null;
+
+          const isLikelyNumberedQuestion = /^q\d+/i.test(questionText);
+
+          if (options.length === 0 && isLikelyNumberedQuestion) {
+            const fallbackOptions: string[] = [];
+            let fallbackIndex = index + 1;
+
+            while (fallbackIndex < lines.length) {
+              const fallbackRaw = lines[fallbackIndex];
+              const fallbackLine = fallbackRaw.trim();
+
+              if (fallbackLine.length === 0) {
+                if (fallbackOptions.length > 0) {
+                  fallbackIndex += 1;
+                  break;
+                }
+
+                fallbackIndex += 1;
+                continue;
+              }
+
+              if (fallbackLine.endsWith("?")) {
+                break;
+              }
+
+              const normalizedFallback = fallbackLine
+                .replace(/^[-•]\s*/, "")
+                .trim();
+
+              if (normalizedFallback.length === 0) {
+                fallbackIndex += 1;
+                continue;
+              }
+
+              fallbackOptions.push(normalizedFallback);
+              fallbackIndex += 1;
+            }
+
+            if (fallbackOptions.length > 0) {
+              options.push(...fallbackOptions.slice(0, 6));
+              optionIndex = fallbackIndex;
+            }
+          }
+
           if (
             options.length > 0 &&
             options.length <= 6 &&
             options.every((option) => option.length <= 160)
           ) {
             quickReplies = {
-              question: questionCandidate,
+              question: questionText,
               options,
+              selectionMode,
+              helperText: combinedHelperText,
             };
 
             displayLines.push(line);
+
+            for (const helperLine of helperLinesFromMessage) {
+              displayLines.push(helperLine);
+            }
+
             index = optionIndex - 1;
             continue;
           }
@@ -112,6 +212,9 @@ export default function Home() {
   const [pendingQuickReply, setPendingQuickReply] = useState<QuickReply | null>(
     null
   );
+  const [selectedQuickReplyOptions, setSelectedQuickReplyOptions] = useState<
+    string[]
+  >([]);
 
   const sendMessage = async (
     content: string,
@@ -135,6 +238,7 @@ export default function Home() {
     setInput("");
     setIsLoading(true);
     setPendingQuickReply(null);
+    setSelectedQuickReplyOptions([]);
 
     const requestMessages = conversationForRequest.map((message) => ({
       role: message.role,
@@ -174,6 +278,7 @@ export default function Home() {
 
       setMessages((prev) => [...prev, assistantMessage]);
       setPendingQuickReply(parsedAssistant.quickReplies ?? null);
+      setSelectedQuickReplyOptions([]);
     } catch (error) {
       console.error("Failed to send message:", error);
       const assistantMessage: ChatMessage = {
@@ -185,6 +290,7 @@ export default function Home() {
       };
       setMessages((prev) => [...prev, assistantMessage]);
       setPendingQuickReply(null);
+      setSelectedQuickReplyOptions([]);
     } finally {
       setIsLoading(false);
     }
@@ -198,6 +304,40 @@ export default function Home() {
     );
   };
 
+  const handleQuickReplySelect = (option: string, question: string) => {
+    if (pendingQuickReply?.selectionMode === "multiple") {
+      setSelectedQuickReplyOptions((prev) => {
+        if (!pendingQuickReply || pendingQuickReply.question !== question) {
+          return prev;
+        }
+
+        if (prev.includes(option)) {
+          return prev.filter((value) => value !== option);
+        }
+
+        return [...prev, option];
+      });
+      return;
+    }
+
+    void sendMessage(option, { question });
+  };
+
+  const handleQuickReplySubmit = (question: string) => {
+    if (
+      !pendingQuickReply ||
+      pendingQuickReply.selectionMode !== "multiple" ||
+      pendingQuickReply.question !== question ||
+      selectedQuickReplyOptions.length === 0
+    ) {
+      return;
+    }
+
+    const responseContent = selectedQuickReplyOptions.join("\n");
+    setSelectedQuickReplyOptions([]);
+    void sendMessage(responseContent, { question });
+  };
+
   const handleInputChange: ChangeEventHandler<HTMLTextAreaElement> = (event) => {
     setInput(event.target.value);
   };
@@ -205,10 +345,6 @@ export default function Home() {
   const handlePathwaySelect = (option: (typeof PATHWAY_OPTIONS)[number]) => {
     setSelectedPathway(option.id);
     void sendMessage(option.label);
-  };
-
-  const handleQuickReplySelect = (option: string, question: string) => {
-    void sendMessage(option, { question });
   };
 
   return (
@@ -225,6 +361,9 @@ export default function Home() {
             <MessageList
               messages={messages}
               onQuickReplySelect={handleQuickReplySelect}
+              onQuickReplySubmit={handleQuickReplySubmit}
+              activeQuickReplyQuestion={pendingQuickReply?.question ?? null}
+              selectedQuickReplyOptions={selectedQuickReplyOptions}
               isBusy={isLoading}
             />
           </div>
