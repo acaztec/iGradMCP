@@ -25,7 +25,7 @@ Add the OpenAI credentials that power the final CBCS summary:
 
 | Variable | Required | Value |
 | --- | --- | --- |
-| `OPENAI_API_KEY` | Yes | Your OpenAI API key with access to `gpt-4o-mini` (or another configured model). |
+| `OPENAI_API_KEY` | Yes | Your OpenAI API key with access to `gpt-4o` (or another configured model). |
 | `OPENAI_MODEL` | No | Override the default model name if desired. |
 | `OPENAI_BASE_URL` | No | Point to a compatible OpenAI endpoint if not using the default cloud API. |
 

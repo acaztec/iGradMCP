@@ -58,22 +58,67 @@ export default function MessageList({
             }`}
           >
             {message.role === "assistant" && "markdownContent" in message ? (
-              <div className="space-y-3 text-sm leading-relaxed text-neutral-900">
+              <div className="space-y-3 text-neutral-900">
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
                   components={{
+                    h1: ({ children }) => (
+                      <h1 className="text-xl font-semibold text-purple-900">
+                        {children}
+                      </h1>
+                    ),
+                    h2: ({ children }) => (
+                      <h2 className="text-lg font-semibold text-purple-900">
+                        {children}
+                      </h2>
+                    ),
+                    h3: ({ children }) => (
+                      <h3 className="text-base font-semibold text-purple-900">
+                        {children}
+                      </h3>
+                    ),
+                    h4: ({ children }) => (
+                      <h4 className="text-sm font-semibold text-purple-900">
+                        {children}
+                      </h4>
+                    ),
                     p: ({ children }) => (
-                      <p className="whitespace-pre-wrap leading-relaxed">{children}</p>
+                      <p className="whitespace-pre-wrap text-sm leading-relaxed text-neutral-900">
+                        {children}
+                      </p>
+                    ),
+                    strong: ({ children }) => (
+                      <strong className="font-semibold text-neutral-900">
+                        {children}
+                      </strong>
+                    ),
+                    em: ({ children }) => (
+                      <em className="text-neutral-900">{children}</em>
                     ),
                     li: ({ children }) => (
-                      <li className="leading-relaxed">{children}</li>
+                      <li className="text-sm leading-relaxed text-neutral-900">
+                        {children}
+                      </li>
                     ),
                     ul: ({ children }) => (
                       <ul className="ml-5 list-disc space-y-1">{children}</ul>
                     ),
                     ol: ({ children }) => (
-                      <ol className="ml-5 list-decimal space-y-1">{children}</ol>
+                      <ol className="ml-5 list-decimal space-y-1">
+                        {children}
+                      </ol>
                     ),
+                    a: ({ children, href }) => (
+                      <a
+                        href={href}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-sm font-medium text-purple-700 underline"
+                      >
+                        {children}
+                      </a>
+                    ),
+                    hr: () => <hr className="border-neutral-200" />,
                   }}
                 >
                   {message.markdownContent}
