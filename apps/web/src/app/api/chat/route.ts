@@ -55,7 +55,7 @@ type SkillConfidence = "confident" | "needs-support" | "unsure";
 
 type GedReadiness = "not-ready" | "somewhat-ready" | "refresher";
 
-type GedSubject = "math" | "reading" | "language-mechanics" | "writing";
+type GedSubject = "math" | "reading";
 
 type KnowledgeQuestionId =
   | "icd10-purpose"
@@ -236,8 +236,6 @@ const GED_ASSESSMENT_ORDER: GedSubject[] = ["math", "reading"];
 const GED_SUBJECT_LABELS: Record<GedSubject, string> = {
   math: "math",
   reading: "reading",
-  "language-mechanics": "language mechanics",
-  writing: "writing",
 };
 
 const GED_ASSESSMENTS: Partial<
@@ -263,7 +261,12 @@ const GED_ASSESSMENTS: Partial<
       {
         id: "math-division",
         prompt: "Q2: What is 72 ÷ 5?",
-        options: ["A) 12", "B) 13", "C) 14 R2", "D) 14 R4"],
+        options: [
+          "A) 12",
+          "B) 13",
+          "C) 14 remainder 2",
+          "D) 14 remainder 4",
+        ],
       },
       {
         id: "math-exponents",
@@ -323,8 +326,6 @@ const GED_SUBJECTS_PROMPT = [
   "Select all that apply.",
   "• Math",
   "• Reading",
-  "• Language Mechanics",
-  "• Writing",
 ].join("\n");
 
 const CORE_CBCS_LESSONS = [
@@ -457,22 +458,6 @@ const GED_SUBJECT_LESSONS: Record<
       "Reading for Facts",
       "Reading Nonfiction",
       "Drawing Conclusions in Reading",
-    ],
-  },
-  "language-mechanics": {
-    focus: "language mechanics",
-    lessons: [
-      "Capitalization and Punctuation",
-      "Common Writing Issues",
-      "Creating an Outline",
-    ],
-  },
-  writing: {
-    focus: "writing skills",
-    lessons: [
-      "Writing an Essay",
-      "Organization",
-      "Writing Logical Arguments",
     ],
   },
 };
@@ -715,14 +700,6 @@ function parseGedSubjects(content: string): GedSubject[] | null {
 
     if (/reading/.test(normalized) || /literacy/.test(normalized)) {
       selections.add("reading");
-    }
-
-    if (/language/.test(normalized) || /mechanics/.test(normalized) || /grammar/.test(normalized)) {
-      selections.add("language-mechanics");
-    }
-
-    if (/writing/.test(normalized) || /essays?/.test(normalized)) {
-      selections.add("writing");
     }
   };
 
@@ -1353,8 +1330,6 @@ async function getAssistantReply(messages: ChatMessage[]): Promise<string> {
         "Select all that apply.",
         "• Math",
         "• Reading",
-        "• Language Mechanics",
-        "• Writing",
       ].join("\n");
     }
   }
