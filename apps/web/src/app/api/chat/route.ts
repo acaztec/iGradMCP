@@ -420,11 +420,9 @@ function buildKnowledgeQuestionPrompt(
   careerGoal: string | null
 ): string {
   const optionLines = question.options.map((option) => `• ${option}`).join("\n");
-  const encouragement = buildGoalLead(
-    careerGoal,
-    `You're doing great keeping "%goal%" in view!`,
-    "You're doing great—keep going!"
-  );
+  const encouragement = careerGoal
+    ? "You're doing great—let's keep the momentum going!"
+    : "You're doing great—keep going!";
   return `${encouragement}\n${question.prompt}\n${optionLines}`;
 }
 
@@ -433,11 +431,9 @@ function buildGedQuestionPrompt(
   careerGoal: string | null
 ): string {
   const optionLines = question.options.map((option) => `• ${option}`).join("\n");
-  const encouragement = buildGoalLead(
-    careerGoal,
-    `Each answer moves you closer to "%goal%"—here's the next one:`,
-    "Each answer moves you closer—here's the next one:"
-  );
+  const encouragement = careerGoal
+    ? "Each answer keeps your CBCS plan moving—here's the next one:"
+    : "Each answer keeps your progress moving—here's the next one:";
   return `${encouragement}\n${question.prompt}\n${optionLines}`;
 }
 
@@ -641,6 +637,14 @@ function buildGoalLead(
   }
 
   return template.replace(/%goal%/g, formatted);
+}
+
+function buildGoalClosing(goal: string | null): string {
+  return buildGoalLead(
+    goal,
+    `Keep taking steps toward "%goal%"—you've got this!`,
+    "Keep taking steps toward your CBCS goal—you've got this!"
+  );
 }
 
 function extractJsonObject<T>(content: string): T {
@@ -1205,6 +1209,7 @@ function buildPlanBlueprint(inputs: PlanInputs): PlanBlueprint {
 
 function buildStaticPlan(inputs: PlanInputs): string {
   const blueprint = buildPlanBlueprint(inputs);
+  const closingLine = buildGoalClosing(inputs.careerGoal);
 
   const softSkillContent = blueprint.softSkillLines.join("\n");
   const certificationContent = [
@@ -1222,6 +1227,7 @@ function buildStaticPlan(inputs: PlanInputs): string {
     `### Certification Prep Focus\n${certificationContent}`,
     `### CBCS Knowledge Assessment\n${blueprint.knowledgeAssessmentLine}`,
     `### Recommended Lessons\n${recommendedLessonContent}`,
+    closingLine,
   ].join("\n\n");
 }
 
@@ -1268,6 +1274,7 @@ async function generateCbcsPlan(
 ): Promise<string> {
   const blueprint = buildPlanBlueprint(inputs);
   const { answers } = inputs;
+  const closingLine = buildGoalClosing(inputs.careerGoal);
   const lessonCatalog = formatLessonCatalog();
 
   const answerSummaryLines: string[] = [];
@@ -1402,6 +1409,7 @@ async function generateCbcsPlan(
     ].join("\n")}`,
     `CBCS knowledge assessment bullet:\n${blueprint.knowledgeAssessmentLine}`,
     `Recommended lessons:\n${blueprint.recommendedLessonLines.join("\n")}`,
+    `Closing encouragement line:\n${closingLine}`,
   ].join("\n\n");
 
   const userPrompt = [
