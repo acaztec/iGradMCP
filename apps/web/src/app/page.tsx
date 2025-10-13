@@ -168,7 +168,7 @@ function parseAssistantMessage(content: string): {
           if (
             options.length > 0 &&
             options.length <= 6 &&
-            options.every((option) => option.length <= 160)
+            options.every((option) => option.length <= 240)
           ) {
             quickReplies = {
               question: questionText,
@@ -348,7 +348,7 @@ export default function Home() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col bg-gradient-to-b from-purple-50 via-white to-white">
+    <div className="flex min-h-screen flex-col bg-gradient-to-b from-sky-50 via-white to-white">
       <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-8 px-4 py-10 sm:px-6 lg:px-8">
         <PathwaySelector
           options={PATHWAY_OPTIONS}

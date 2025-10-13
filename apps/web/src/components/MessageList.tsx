@@ -69,22 +69,22 @@ export default function MessageList({
                   remarkPlugins={[remarkGfm]}
                   components={{
                     h1: ({ children }) => (
-                      <h1 className="text-xl font-semibold text-purple-900">
+                      <h1 className="text-xl font-semibold text-blue-900">
                         {children}
                       </h1>
                     ),
                     h2: ({ children }) => (
-                      <h2 className="text-lg font-semibold text-purple-900">
+                      <h2 className="text-lg font-semibold text-blue-900">
                         {children}
                       </h2>
                     ),
                     h3: ({ children }) => (
-                      <h3 className="text-base font-semibold text-purple-900">
+                      <h3 className="text-base font-semibold text-blue-900">
                         {children}
                       </h3>
                     ),
                     h4: ({ children }) => (
-                      <h4 className="text-sm font-semibold text-purple-900">
+                      <h4 className="text-sm font-semibold text-blue-900">
                         {children}
                       </h4>
                     ),
@@ -119,7 +119,7 @@ export default function MessageList({
                         href={href}
                         target="_blank"
                         rel="noreferrer"
-                        className="text-sm font-medium text-purple-700 underline"
+                        className="text-sm font-medium text-blue-700 underline"
                       >
                         {children}
                       </a>
@@ -155,12 +155,12 @@ export default function MessageList({
                             key={option}
                             className={`flex items-center gap-3 rounded-xl border px-3 py-2 text-sm font-medium transition ${
                               isSelected
-                                ? "border-purple-400 bg-purple-50 text-purple-900"
-                                : "border-purple-100 bg-white text-neutral-900"
+                                ? "border-orange-400 bg-orange-50 text-orange-900"
+                                : "border-blue-100 bg-white text-neutral-900"
                             } ${
                               !isActiveQuickReply || isBusy
                                 ? "opacity-60"
-                                : "hover:border-purple-300 hover:bg-purple-50"
+                                : "hover:border-blue-300 hover:bg-blue-50"
                             }`}
                           >
                             <input
@@ -173,7 +173,7 @@ export default function MessageList({
                                 )
                               }
                               disabled={!isActiveQuickReply || isBusy}
-                              className="h-4 w-4 rounded border-purple-300 text-purple-600 focus:ring-purple-500"
+                              className="h-4 w-4 rounded border-blue-300 text-blue-600 focus:ring-orange-500"
                             />
                             <span>{option}</span>
                           </label>
@@ -184,7 +184,7 @@ export default function MessageList({
                         onClick={() =>
                           onQuickReplySubmit?.(message.quickReplies!.question)
                         }
-                        className="w-full rounded-full bg-purple-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-purple-700 focus-ring disabled:cursor-not-allowed disabled:opacity-60"
+                        className="w-full rounded-full bg-orange-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-orange-600 focus-ring disabled:cursor-not-allowed disabled:opacity-60"
                         disabled={
                           !activeQuickReplyQuestion ||
                           activeQuickReplyQuestion !==
@@ -202,7 +202,7 @@ export default function MessageList({
                         <button
                           key={option}
                           type="button"
-                          className="rounded-full border border-purple-200 bg-purple-50 px-4 py-1 text-sm font-medium text-purple-800 transition hover:bg-purple-100 disabled:cursor-not-allowed disabled:opacity-60"
+                          className="rounded-full border border-blue-200 bg-blue-50 px-4 py-1 text-sm font-medium text-blue-800 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
                           onClick={() =>
                             onQuickReplySelect?.(
                               option,
@@ -236,7 +236,7 @@ export default function MessageList({
         <div className="flex justify-start">
           <div className="max-w-3xl rounded-lg border border-neutral-200 bg-white px-4 py-3 text-sm text-neutral-600">
             <div className="flex items-center gap-2">
-              <span className="inline-flex h-2.5 w-2.5 animate-pulse rounded-full bg-purple-500" />
+              <span className="inline-flex h-2.5 w-2.5 animate-pulse rounded-full bg-orange-500" />
               Aztec IET is thinking…
             </div>
           </div>
