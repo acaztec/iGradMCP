@@ -186,9 +186,54 @@ export const CBCS_LESSONS = [
   "Third-Party Payments and Adjustments",
 ];
 
+const CBCS_LESSON_CODES: Record<string, string> = {
+  Certification: "cbcs-intro",
+  "Revenue Cycle": "cbcs-1a-1b-k1",
+  "Regulatory Compliance": "cbcs-1c-1d-1e-k2-k3-k4-k8",
+  "Fraud and Abuse": "cbcs-1e-k2-k5-k7",
+  "Fraud and Abuse Compliance Plans and Audit Programs": "cbcs-1e-k6-k9",
+  "Health Insurance Plans": "cbcs-k12-k14-k15-k19",
+  "Health Insurance Costs": "cbcs-2b-4d-k18",
+  "Government Health Insurance and Other Third-Party Payers": "cbcs-k15-k16",
+  "Verification of Insurance": "cbcs-2a-2b-k10-k11-k17-k20-k37",
+  "Coordination of Benefits": "cbcs-2c-k13",
+  "Anatomy and Physiology: Part 1": "cbcs-3a-k21a",
+  "Anatomy and Physiology: Part 2": "cbcs-3a-k21b",
+  "Anatomy and Physiology: Part 3": "cbcs-3a-k21c",
+  "Medical Terminology": "cbcs-3a-k22",
+  "Medical Abbreviations, Acronyms, and Eponyms": "cbcs-3a-k23",
+  "Health Information Systems": "cbcs-3a-k2-k24-k25",
+  "Medical Records": "cbcs-3a-k25",
+  "Medical Coding Sets": "cbcs-3f-k26-k27-k28-k29-k30",
+  "Diagnostic Coding": "cbcs-3b-3f-k28-k32",
+  "Level I Healthcare Common Procedure Coding System (HCPCS): Current Procedural Terminology (CPT®)":
+    "cbcs-3c-3d-3e-3f-k29-k31-k32-k33-k34-k35-k36-k38",
+  "Level II Healthcare Common Procedure Coding System (HCPCS)": "cbcs-3c-3d-3f-k30-k31-k35",
+  "Electronic Claims and Paper Claims Submission to Third-Party Payers": "cbcs-4c-k39-k40-k41-k42-k43",
+  "CMS-1500 Health Insurance Claim Form Data Elements": "cbcs-4b-k42",
+  "Proper Code Sequencing": "cbcs-4a-k45",
+  "Coding Instructions": "cbcs-4d-4l-k44-k46",
+  "Billing and Reimbursement": "cbcs-4g-4h-4i-4j-4k-k47-k48-k49-k50-k51-k52-k53",
+  Collections: "cbcs-4e-4m-k54",
+  "Third-Party Payments and Adjustments": "cbcs-4d-4f-k52-k55-k56-k57",
+};
+
+export function formatCbcsLessonLabel(lesson: string): string {
+  const normalized = lesson.trim();
+  const code = CBCS_LESSON_CODES[normalized];
+  return code ? `${normalized} (${code})` : normalized;
+}
+
 export function formatLessonCatalog(): string {
-  const formatSection = (title: string, lessons: string[]) => {
-    return [title, ...lessons.map((lesson) => `- ${lesson}`)].join("\n");
+  const formatSection = (
+    title: string,
+    lessons: string[],
+    formatter: (lesson: string) => string = (lesson) => lesson
+  ) => {
+    return [
+      title,
+      ...lessons.map((lesson) => `- ${formatter(lesson)}`),
+    ].join("\n");
   };
 
   return [
@@ -196,6 +241,6 @@ export function formatLessonCatalog(): string {
     "",
     formatSection("Soft Skills Lessons", SOFT_SKILLS_LESSONS),
     "",
-    formatSection("CBCS Lessons", CBCS_LESSONS),
+    formatSection("CBCS Lessons", CBCS_LESSONS, formatCbcsLessonLabel),
   ].join("\n");
 }

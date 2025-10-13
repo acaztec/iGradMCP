@@ -1,4 +1,4 @@
-import { formatLessonCatalog } from "@/data/lessons";
+import { formatCbcsLessonLabel, formatLessonCatalog } from "@/data/lessons";
 
 const PATHWAYS = [
   {
@@ -69,6 +69,7 @@ type KnowledgeAnswer = {
 };
 
 type AnswerSummary = {
+  careerGoal: string;
   diploma: string;
   spreadsheet: string;
   timeManagement: string;
@@ -80,6 +81,7 @@ type AnswerSummary = {
 };
 
 type PlanInputs = {
+  careerGoal: string;
   hasDiploma: boolean;
   spreadsheetComfort: SpreadsheetComfort;
   timeManagement: SkillConfidence;
@@ -207,6 +209,16 @@ const KNOWLEDGE_OPTION_PATTERNS: Record<
   ],
 };
 
+const CAREER_GOAL_PROMPT = [
+  "Thanks for choosing the Certified Billing and Coding Specialist (CBCS) pathway!",
+  "Tell me what you'd like to do or where you'd like to work as a CBCS.",
+].join("\n");
+
+const CAREER_GOAL_REMINDER = [
+  "I want to personalize every step for you—share the CBCS role or workplace you're aiming for.",
+  "Tell me what you'd like to do or where you'd like to work as a CBCS.",
+].join("\n");
+
 const CBCS_ASSESSMENT_INTRO = [
   "Got it. Thanks for helping me better understand your soft skills needs. To get certified, you will also need to pass a certification test, such as the National Healthcareer Association Certified Coding and Billing Specialist (CBCS) exam.",
   "The CBCS exam includes questions about the following topics: The Revenue Cycle and Regulatory Compliance, Insurance Eligibility and Other Payer Requirements, Coding and Coding Guidelines, and Billing and Reimbursement.",
@@ -215,16 +227,32 @@ const CBCS_ASSESSMENT_INTRO = [
   "CBCS Knowledge Assessment [User takes exam, which pulls 1-2 drill items each unit in the course. Sample questions follow. Incorrect answer in red.]",
 ].join("\n");
 
-function buildAssessmentIntroWithFirstQuestion(): string {
+function buildAssessmentIntroWithFirstQuestion(
+  careerGoal: string | null
+): string {
   const [firstQuestion] = KNOWLEDGE_QUESTIONS;
 
   if (!firstQuestion) {
-    return CBCS_ASSESSMENT_INTRO;
+    if (!careerGoal) {
+      return CBCS_ASSESSMENT_INTRO;
+    }
+
+    const contextLine = `Keeping your goal of "${careerGoal}" in sight, let's zero in on the CBCS topics that matter most.`;
+    return [CBCS_ASSESSMENT_INTRO, contextLine].join("\n\n");
   }
 
-  const firstPrompt = buildKnowledgeQuestionPrompt(firstQuestion);
+  const firstPrompt = buildKnowledgeQuestionPrompt(firstQuestion, careerGoal);
+  const contextLine = careerGoal
+    ? `Keeping your goal of "${careerGoal}" in sight, let's zero in on the CBCS topics that matter most.`
+    : null;
 
-  return [CBCS_ASSESSMENT_INTRO, firstPrompt].join("\n\n");
+  return [
+    CBCS_ASSESSMENT_INTRO,
+    contextLine,
+    firstPrompt,
+  ]
+    .filter((line): line is string => Boolean(line))
+    .join("\n\n");
 }
 
 type GedAssessmentQuestion = MultipleChoiceQuestion & {
@@ -318,15 +346,65 @@ const GED_ASSESSMENTS: Partial<
   },
 };
 
-const GED_READINESS_PROMPT =
-  "How would you rate your readiness to take a high-school equivalency (HSE) exam?\n• I’m not ready. I would need to start with basic academic skills and work my way up to intermediate skills and then high-school skills.\n• I’m somewhat ready. I would need to start with intermediate academic skills and work my way up to high-school level skills.\n• I’m ready, but I would like a refresher of high-school level academic skills.";
+function buildGedReadinessPrompt(careerGoal: string | null): string {
+  const lead = buildGoalLead(
+    careerGoal,
+    `No worries—we'll pace things so you can thrive in "%goal%". How would you rate your readiness to take a high-school equivalency (HSE) exam?`,
+    "How would you rate your readiness to take a high-school equivalency (HSE) exam?"
+  );
 
-const GED_SUBJECTS_PROMPT = [
-  "Which subject area(s) do you feel you need to work on?",
-  "Select all that apply.",
-  "• Math",
-  "• Reading",
-].join("\n");
+  return [
+    lead,
+    "• I’m not ready. I would need to start with basic academic skills and work my way up to intermediate skills and then high-school skills.",
+    "• I’m somewhat ready. I would need to start with intermediate academic skills and work my way up to high-school level skills.",
+    "• I’m ready, but I would like a refresher of high-school level academic skills.",
+  ].join("\n");
+}
+
+function buildGedReadinessReprompt(careerGoal: string | null): string {
+  const lead = buildGoalLead(
+    careerGoal,
+    `To keep your "%goal%" plan moving, could you pick the option that best matches your GED readiness?`,
+    "Could you pick the option that best matches your GED readiness so I can recommend the right lessons?"
+  );
+
+  return [
+    lead,
+    "• I’m not ready. I would need to start with basic academic skills and work my way up to intermediate skills and then high-school skills.",
+    "• I’m somewhat ready. I would need to start with intermediate academic skills and work my way up to high-school level skills.",
+    "• I’m ready, but I would like a refresher of high-school level academic skills.",
+  ].join("\n");
+}
+
+function buildGedSubjectsPrompt(careerGoal: string | null): string {
+  const intro = buildGoalLead(
+    careerGoal,
+    `Which subject area(s) do you want to strengthen so "%goal%" stays on track?`,
+    "Which subject area(s) do you feel you need to work on?"
+  );
+
+  return [
+    intro,
+    "Select all that apply.",
+    "• Math",
+    "• Reading",
+  ].join("\n");
+}
+
+function buildGedSubjectsReprompt(careerGoal: string | null): string {
+  const intro = buildGoalLead(
+    careerGoal,
+    `Just let me know which GED subjects you want to prioritize so I can keep tailoring the path to "%goal%".`,
+    "Just let me know which GED subjects you want to prioritize so I can keep tailoring your CBCS plan."
+  );
+
+  return [
+    intro,
+    "Select all that apply.",
+    "• Math",
+    "• Reading",
+  ].join("\n");
+}
 
 const CORE_CBCS_LESSONS = [
   "Certification",
@@ -337,17 +415,36 @@ const CORE_CBCS_LESSONS = [
   "Billing and Reimbursement",
 ];
 
-function buildKnowledgeQuestionPrompt(question: KnowledgeQuestion): string {
+function buildKnowledgeQuestionPrompt(
+  question: KnowledgeQuestion,
+  careerGoal: string | null
+): string {
   const optionLines = question.options.map((option) => `• ${option}`).join("\n");
-  return `${question.prompt}\n${optionLines}`;
+  const encouragement = buildGoalLead(
+    careerGoal,
+    `You're doing great keeping "%goal%" in view!`,
+    "You're doing great—keep going!"
+  );
+  return `${encouragement}\n${question.prompt}\n${optionLines}`;
 }
 
-function buildGedQuestionPrompt(question: GedAssessmentQuestion): string {
+function buildGedQuestionPrompt(
+  question: GedAssessmentQuestion,
+  careerGoal: string | null
+): string {
   const optionLines = question.options.map((option) => `• ${option}`).join("\n");
-  return `${question.prompt}\n${optionLines}`;
+  const encouragement = buildGoalLead(
+    careerGoal,
+    `Each answer moves you closer to "%goal%"—here's the next one:`,
+    "Each answer moves you closer—here's the next one:"
+  );
+  return `${encouragement}\n${question.prompt}\n${optionLines}`;
 }
 
-function buildGedSubjectIntroWithFirstQuestion(subject: GedSubject): string | null {
+function buildGedSubjectIntroWithFirstQuestion(
+  subject: GedSubject,
+  careerGoal: string | null
+): string | null {
   const config = GED_ASSESSMENTS[subject];
 
   if (!config || config.questions.length === 0) {
@@ -361,13 +458,18 @@ function buildGedSubjectIntroWithFirstQuestion(subject: GedSubject): string | nu
   }
 
   const introBlock = config.introLines.join("\n");
-  const firstPrompt = buildGedQuestionPrompt(firstQuestion);
+  const contextLine = buildGoalLead(
+    careerGoal,
+    `This check-in keeps you on track for "%goal%".`,
+    "This check-in keeps you on track."
+  );
+  const firstPrompt = buildGedQuestionPrompt(firstQuestion, careerGoal);
 
   if (introBlock.length === 0) {
-    return firstPrompt;
+    return [contextLine, firstPrompt].join("\n\n");
   }
 
-  return `${introBlock}\n\n${firstPrompt}`;
+  return `${introBlock}\n\n${contextLine}\n\n${firstPrompt}`;
 }
 
 function createMultipleChoiceAnswerParser(
@@ -511,6 +613,34 @@ function extractLatestAnswer(content: string): string {
   }
 
   return segments[segments.length - 1];
+}
+
+function formatCareerGoal(goal: string | null): string | null {
+  if (!goal) {
+    return null;
+  }
+
+  const normalized = goal.replace(/\s+/g, " ").trim();
+
+  if (!normalized) {
+    return null;
+  }
+
+  return normalized.replace(/^["“]+/, "").replace(/["”]+$/, "");
+}
+
+function buildGoalLead(
+  goal: string | null,
+  template: string,
+  fallback: string
+): string {
+  const formatted = formatCareerGoal(goal);
+
+  if (!formatted) {
+    return fallback;
+  }
+
+  return template.replace(/%goal%/g, formatted);
 }
 
 function extractJsonObject<T>(content: string): T {
@@ -777,6 +907,25 @@ function hasUserReplyAfterIndex(
   return false;
 }
 
+function getUserMessageAfterIndex(
+  messages: ChatMessage[],
+  startIndex: number
+): { index: number; content: string } | null {
+  for (let index = startIndex + 1; index < messages.length; index += 1) {
+    const entry = messages[index];
+
+    if (entry?.role === "user") {
+      const trimmed = entry.content.trim();
+
+      if (trimmed.length > 0) {
+        return { index, content: entry.content };
+      }
+    }
+  }
+
+  return null;
+}
+
 function selectDigitalLessons(spreadsheetComfort: SpreadsheetComfort): string[] {
   if (spreadsheetComfort === "novice") {
     return [
@@ -963,8 +1112,11 @@ function getRecommendedLessonLines(
   const lines: (string | null)[] = [];
 
   const cbcsLessons = [...knowledgeBoosts, ...CORE_CBCS_LESSONS];
+  const formattedCbcsLessons = cbcsLessons.map(formatCbcsLessonLabel);
 
-  lines.push(formatLessonGroup("CBCS Certification Prep", cbcsLessons));
+  lines.push(
+    formatLessonGroup("CBCS Certification Prep", formattedCbcsLessons)
+  );
 
   lines.push(
     formatLessonGroup(
@@ -1118,25 +1270,46 @@ async function generateCbcsPlan(
   const { answers } = inputs;
   const lessonCatalog = formatLessonCatalog();
 
-  const answerSummaryLines = [
-    `1. Do you have a high-school diploma or high-school equivalency?\n   Answer: ${answers.diploma}`,
-    `2. How comfortable are you working with spreadsheets?\n   Answer: ${answers.spreadsheet}`,
-    `3. How do you feel about your time-management skills?\n   Answer: ${answers.timeManagement}`,
-    `4. How do you feel about your communication skills?\n   Answer: ${answers.communication}`,
-    `5. How do you feel about your ability to work with others?\n   Answer: ${answers.teamwork}`,
-  ];
+  const answerSummaryLines: string[] = [];
+  const pushAnswer = (label: string, answer: string) => {
+    if (!answer) {
+      return;
+    }
+
+    answerSummaryLines.push(
+      `${answerSummaryLines.length + 1}. ${label}\n   Answer: ${answer}`
+    );
+  };
+
+  pushAnswer("CBCS career goal focus", answers.careerGoal);
+  pushAnswer(
+    "Do you have a high-school diploma or high-school equivalency?",
+    answers.diploma
+  );
+  pushAnswer(
+    "How comfortable are you working with spreadsheets?",
+    answers.spreadsheet
+  );
+  pushAnswer(
+    "How do you feel about your time-management skills?",
+    answers.timeManagement
+  );
+  pushAnswer(
+    "How do you feel about your communication skills?",
+    answers.communication
+  );
+  pushAnswer(
+    "How do you feel about your ability to work with others?",
+    answers.teamwork
+  );
 
   if (!inputs.hasDiploma) {
     if (answers.gedReadiness) {
-      answerSummaryLines.push(
-        `6. GED readiness level\n   Answer: ${answers.gedReadiness}`
-      );
+      pushAnswer("GED readiness level", answers.gedReadiness);
     }
 
     if (answers.gedSubjects) {
-      answerSummaryLines.push(
-        `${answers.gedReadiness ? "7" : "6"}. GED subject priorities\n   Answer: ${answers.gedSubjects}`
-      );
+      pushAnswer("GED subject priorities", answers.gedSubjects);
     }
   }
 
@@ -1172,6 +1345,7 @@ async function generateCbcsPlan(
   const answerSummary = answerSummaryLines.join("\n");
 
   const normalizedInterpretationLines = [
+    `- CBCS career goal: ${inputs.careerGoal}`,
     `- Diploma requirement met: ${inputs.hasDiploma ? "Yes" : "No"}`,
     `- Spreadsheet comfort level: ${inputs.spreadsheetComfort}`,
     `- Time-management confidence: ${inputs.timeManagement}`,
@@ -1276,6 +1450,36 @@ async function getAssistantReply(messages: ChatMessage[]): Promise<string> {
     return `Thanks for your interest in the ${pathway.label}! That guidance is coming soon in this demo. For now, choose "Certified Billing and Coding Specialist (CBCS)" so I can walk you through the full experience.`;
   }
 
+  let careerGoal = "";
+
+  const careerGoalPromptIndex = findAssistantMessageIndex(
+    messages,
+    CAREER_GOAL_PROMPT
+  );
+
+  if (careerGoalPromptIndex === -1) {
+    return CAREER_GOAL_PROMPT;
+  }
+
+  const careerGoalResponse = getUserMessageAfterIndex(
+    messages,
+    careerGoalPromptIndex
+  );
+
+  if (!careerGoalResponse) {
+    return CAREER_GOAL_REMINDER;
+  }
+
+  const parsedCareerGoal = formatCareerGoal(
+    extractLatestAnswer(careerGoalResponse.content)
+  );
+
+  if (!parsedCareerGoal) {
+    return CAREER_GOAL_REMINDER;
+  }
+
+  careerGoal = parsedCareerGoal;
+
   const diplomaResult = findParsedResponse(
     userMessages,
     pathwayIndex,
@@ -1283,13 +1487,30 @@ async function getAssistantReply(messages: ChatMessage[]): Promise<string> {
   );
 
   if (!diplomaResult.entry) {
-    return "Do you have a high-school diploma or high-school equivalency?\n• Yes\n• No";
+    const lead = buildGoalLead(
+      careerGoal,
+      `To help you shine in "%goal%", let's check a quick requirement.`,
+      "Let's check a quick requirement before we dive deeper."
+    );
+
+    return [
+      lead,
+      "Do you have a high-school diploma or high-school equivalency?",
+      "• Yes",
+      "• No",
+    ].join("\n");
   }
 
   const hasDiploma = diplomaResult.value;
 
   if (hasDiploma === null) {
-    return "Just a quick check—do you currently have a high-school diploma or high-school equivalency (GED/HiSET)?\n• Yes\n• No";
+    const reminder = buildGoalLead(
+      careerGoal,
+      `Can you pick the option that matches your high-school diploma or equivalency status? It's a key step toward "%goal%".`,
+      "Could you pick the option that best matches your high-school diploma or high-school equivalency status?"
+    );
+
+    return [reminder, "• Yes", "• No"].join("\n");
   }
 
   let gedReadinessResult: ParsedResponse<GedReadiness> | null = null;
@@ -1303,13 +1524,13 @@ async function getAssistantReply(messages: ChatMessage[]): Promise<string> {
     );
 
     if (!gedReadinessResult.entry) {
-      return GED_READINESS_PROMPT;
+      return buildGedReadinessPrompt(careerGoal);
     }
 
     const gedReadinessValue = gedReadinessResult.value;
 
     if (!gedReadinessValue) {
-      return "Could you pick the option that best matches your GED readiness so I can recommend the right lessons?\n• I’m not ready. I would need to start with basic academic skills and work my way up to intermediate skills and then high-school skills.\n• I’m somewhat ready. I would need to start with intermediate academic skills and work my way up to high-school level skills.\n• I’m ready, but I would like a refresher of high-school level academic skills.";
+      return buildGedReadinessReprompt(careerGoal);
     }
 
     gedSubjectsResult = findParsedResponse(
@@ -1319,18 +1540,13 @@ async function getAssistantReply(messages: ChatMessage[]): Promise<string> {
     );
 
     if (!gedSubjectsResult.entry) {
-      return GED_SUBJECTS_PROMPT;
+      return buildGedSubjectsPrompt(careerGoal);
     }
 
     const gedSubjectsValue = gedSubjectsResult.value;
 
     if (!gedSubjectsValue || gedSubjectsValue.length === 0) {
-      return [
-        "Which GED subject areas should we focus on right now?",
-        "Select all that apply.",
-        "• Math",
-        "• Reading",
-      ].join("\n");
+      return buildGedSubjectsReprompt(careerGoal);
     }
   }
 
@@ -1341,17 +1557,50 @@ async function getAssistantReply(messages: ChatMessage[]): Promise<string> {
   );
 
   if (!spreadsheetResult.entry) {
-    if (hasDiploma) {
-      return "Great! Having a high-school diploma or high-school equivalency meets one of the CBCS requirements. How comfortable are you working with spreadsheets?\n• Very comfortable—I use spreadsheets frequently and consider myself an expert.\n• Somewhat comfortable—I occasionally use spreadsheets and know the basics.\n• Not comfortable—I rarely use or have never used spreadsheets.\n• What is a spreadsheet?";
-    }
+    const celebration = hasDiploma
+      ? buildGoalLead(
+          careerGoal,
+          `Great! Having a high-school diploma or high-school equivalency meets one of the CBCS requirements—that keeps "%goal%" within reach.`,
+          "Great! Having a high-school diploma or high-school equivalency meets one of the CBCS requirements."
+        )
+      : buildGoalLead(
+          careerGoal,
+          `Thanks for letting me know. We can plan for your high-school equivalency while you build coding skills so "%goal%" stays on track.`,
+          "Thanks for letting me know. We can plan for your high-school equivalency while you build coding skills."
+        );
 
-    return "Thanks for letting me know. We can plan for your high-school equivalency while you build coding skills. How comfortable are you working with spreadsheets?\n• Very comfortable—I use spreadsheets frequently and consider myself an expert.\n• Somewhat comfortable—I occasionally use spreadsheets and know the basics.\n• Not comfortable—I rarely use or have never used spreadsheets.\n• What is a spreadsheet?";
+    const questionLine = buildGoalLead(
+      careerGoal,
+      `How comfortable are you working with spreadsheets right now to support "%goal%"?`,
+      "How comfortable are you working with spreadsheets?"
+    );
+
+    return [
+      celebration,
+      questionLine,
+      "• Very comfortable—I use spreadsheets frequently and consider myself an expert.",
+      "• Somewhat comfortable—I occasionally use spreadsheets and know the basics.",
+      "• Not comfortable—I rarely use or have never used spreadsheets.",
+      "• What is a spreadsheet?",
+    ].join("\n");
   }
 
   const spreadsheetComfort = spreadsheetResult.value;
 
   if (!spreadsheetComfort) {
-    return "How comfortable are you working with spreadsheets?\n• Very comfortable—I use spreadsheets frequently and consider myself an expert.\n• Somewhat comfortable—I occasionally use spreadsheets and know the basics.\n• Not comfortable—I rarely use or have never used spreadsheets.\n• What is a spreadsheet?";
+    const reminder = buildGoalLead(
+      careerGoal,
+      `Give me a quick read on your spreadsheet comfort so we can map training that supports "%goal%".`,
+      "How comfortable are you working with spreadsheets?"
+    );
+
+    return [
+      reminder,
+      "• Very comfortable—I use spreadsheets frequently and consider myself an expert.",
+      "• Somewhat comfortable—I occasionally use spreadsheets and know the basics.",
+      "• Not comfortable—I rarely use or have never used spreadsheets.",
+      "• What is a spreadsheet?",
+    ].join("\n");
   }
 
   const timeManagementResult = findParsedResponse(
@@ -1361,13 +1610,35 @@ async function getAssistantReply(messages: ChatMessage[]): Promise<string> {
   );
 
   if (!timeManagementResult.entry) {
-    return "How do you feel about your time-management skills?\n• I have good time management skills.\n• I could use some suggestions for improving time-management skills.\n• I’m not sure what time management skills are.";
+    const prompt = buildGoalLead(
+      careerGoal,
+      `Let's build routines that keep "%goal%" moving. How do you feel about your time-management skills?`,
+      "How do you feel about your time-management skills?"
+    );
+
+    return [
+      prompt,
+      "• I have good time management skills.",
+      "• I could use some suggestions for improving time-management skills.",
+      "• I’m not sure what time management skills are.",
+    ].join("\n");
   }
 
   const timeManagement = timeManagementResult.value;
 
   if (!timeManagement) {
-    return "Could you pick the option that best describes your time-management skills?\n• I have good time management skills.\n• I could use some suggestions for improving time-management skills.\n• I’m not sure what time management skills are.";
+    const reminder = buildGoalLead(
+      careerGoal,
+      `Choose the option that best describes your time-management skills so we can plan support for "%goal%".`,
+      "Could you pick the option that best describes your time-management skills?"
+    );
+
+    return [
+      reminder,
+      "• I have good time management skills.",
+      "• I could use some suggestions for improving time-management skills.",
+      "• I’m not sure what time management skills are.",
+    ].join("\n");
   }
 
   const communicationResult = findParsedResponse(
@@ -1377,13 +1648,35 @@ async function getAssistantReply(messages: ChatMessage[]): Promise<string> {
   );
 
   if (!communicationResult.entry) {
-    return "Here’s the next one: How do you feel about your communication skills?\n• I have good communication skills.\n• I could use some suggestions for improving communication skills.\n• I’m not sure what communication skills are.";
+    const prompt = buildGoalLead(
+      careerGoal,
+      `Strong communication will help you shine in "%goal%". How do you feel about your communication skills?`,
+      "Here’s the next one: How do you feel about your communication skills?"
+    );
+
+    return [
+      prompt,
+      "• I have good communication skills.",
+      "• I could use some suggestions for improving communication skills.",
+      "• I’m not sure what communication skills are.",
+    ].join("\n");
   }
 
   const communication = communicationResult.value;
 
   if (!communication) {
-    return "Please let me know which option fits your communication skills best?\n• I have good communication skills.\n• I could use some suggestions for improving communication skills.\n• I’m not sure what communication skills are.";
+    const reminder = buildGoalLead(
+      careerGoal,
+      `Let me know which option fits your communication skills best so your "%goal%" journey stays strong.`,
+      "Please let me know which option fits your communication skills best?"
+    );
+
+    return [
+      reminder,
+      "• I have good communication skills.",
+      "• I could use some suggestions for improving communication skills.",
+      "• I’m not sure what communication skills are.",
+    ].join("\n");
   }
 
   const teamworkResult = findParsedResponse(
@@ -1393,16 +1686,39 @@ async function getAssistantReply(messages: ChatMessage[]): Promise<string> {
   );
 
   if (!teamworkResult.entry) {
-    return "Here’s the last question about soft skills: How do you feel about your ability to work with others?\n• I work well with others and feel confident in my skills in this area.\n• I could use some suggestions for improving how I work with others.\n• I’m not sure what skills are related to working well with others.";
+    const prompt = buildGoalLead(
+      careerGoal,
+      `Collaboration is huge when you’re working toward "%goal%". How do you feel about your ability to work with others?`,
+      "Here’s the last question about soft skills: How do you feel about your ability to work with others?"
+    );
+
+    return [
+      prompt,
+      "• I work well with others and feel confident in my skills in this area.",
+      "• I could use some suggestions for improving how I work with others.",
+      "• I’m not sure what skills are related to working well with others.",
+    ].join("\n");
   }
 
   const teamwork = teamworkResult.value;
 
   if (!teamwork) {
-    return "Please choose the option that best describes how you work with others?\n• I work well with others and feel confident in my skills in this area.\n• I could use some suggestions for improving how I work with others.\n• I’m not sure what skills are related to working well with others.";
+    const reminder = buildGoalLead(
+      careerGoal,
+      `Choose the option that best describes how you work with others so we can support "%goal%".`,
+      "Please choose the option that best describes how you work with others?"
+    );
+
+    return [
+      reminder,
+      "• I work well with others and feel confident in my skills in this area.",
+      "• I could use some suggestions for improving how I work with others.",
+      "• I’m not sure what skills are related to working well with others.",
+    ].join("\n");
   }
 
   const answers: AnswerSummary = {
+    careerGoal,
     diploma: extractLatestAnswer(diplomaResult.entry.content),
     spreadsheet: extractLatestAnswer(spreadsheetResult.entry.content),
     timeManagement: extractLatestAnswer(timeManagementResult.entry.content),
@@ -1445,12 +1761,12 @@ async function getAssistantReply(messages: ChatMessage[]): Promise<string> {
       }
 
       const introWithFirstQuestion =
-        buildGedSubjectIntroWithFirstQuestion(subject);
+        buildGedSubjectIntroWithFirstQuestion(subject, careerGoal);
       const subjectLabel = GED_SUBJECT_LABELS[subject] ?? subject;
 
       for (let index = 0; index < config.questions.length; index += 1) {
         const question = config.questions[index]!;
-        const prompt = buildGedQuestionPrompt(question);
+        const prompt = buildGedQuestionPrompt(question, careerGoal);
         const assistantIndex = findAssistantMessageIndex(messages, prompt);
 
         if (assistantIndex === -1) {
@@ -1476,10 +1792,13 @@ async function getAssistantReply(messages: ChatMessage[]): Promise<string> {
         }
 
         if (!result.value) {
-          return [
-            `Thanks for sticking with me! Please choose one of the answer choices so I can tailor your ${subjectLabel} study plan.`,
-            prompt,
-          ].join("\n");
+          const encouragement = buildGoalLead(
+            careerGoal,
+            `Thanks for sticking with me! Please choose one of the answer choices so I can tailor your ${subjectLabel} study plan for "%goal%".`,
+            `Thanks for sticking with me! Please choose one of the answer choices so I can tailor your ${subjectLabel} study plan.`
+          );
+
+          return [encouragement, prompt].join("\n");
         }
 
         lastAnsweredUserIndex = result.entry.index;
@@ -1495,13 +1814,13 @@ async function getAssistantReply(messages: ChatMessage[]): Promise<string> {
   );
 
   if (introIndex === -1) {
-    return buildAssessmentIntroWithFirstQuestion();
+    return buildAssessmentIntroWithFirstQuestion(careerGoal);
   }
 
   let lastUserIndex = lastAnsweredUserIndex;
 
   for (const question of KNOWLEDGE_QUESTIONS) {
-    const prompt = buildKnowledgeQuestionPrompt(question);
+    const prompt = buildKnowledgeQuestionPrompt(question, careerGoal);
     const assistantIndex = findAssistantMessageIndex(messages, prompt);
 
     if (assistantIndex === -1) {
@@ -1525,10 +1844,13 @@ async function getAssistantReply(messages: ChatMessage[]): Promise<string> {
     const parsed = result.value;
 
     if (!parsed) {
-      return [
-        "Thanks for sticking with me! Please choose one of the answer choices so I can tailor the CBCS study plan.",
-        prompt,
-      ].join("\n");
+      const encouragement = buildGoalLead(
+        careerGoal,
+        'Thanks for sticking with me! Please choose one of the answer choices so I can tailor the CBCS study plan for "%goal%".',
+        "Thanks for sticking with me! Please choose one of the answer choices so I can tailor the CBCS study plan."
+      );
+
+      return [encouragement, prompt].join("\n");
     }
 
     knowledgeAnswers.push({
@@ -1545,6 +1867,7 @@ async function getAssistantReply(messages: ChatMessage[]): Promise<string> {
   }
 
   return await generateCbcsPlan({
+    careerGoal,
     hasDiploma,
     spreadsheetComfort,
     timeManagement,
