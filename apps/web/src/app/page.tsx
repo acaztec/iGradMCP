@@ -168,7 +168,7 @@ function parseAssistantMessage(content: string): {
           if (
             options.length > 0 &&
             options.length <= 6 &&
-            options.every((option) => option.length <= 160)
+            options.every((option) => option.length <= 240)
           ) {
             quickReplies = {
               question: questionText,
@@ -226,10 +226,14 @@ export default function Home() {
     }
 
     const timestamp = new Date().toISOString();
+    const rawContent = context?.question
+      ? `${context.question}\n${trimmedContent}`
+      : trimmedContent;
     const userMessage: ChatMessage = {
       id: `user-${timestamp}`,
       role: "user",
       content: trimmedContent,
+      rawContent,
       createdAt: timestamp,
     };
 
@@ -242,10 +246,7 @@ export default function Home() {
 
     const requestMessages = conversationForRequest.map((message) => ({
       role: message.role,
-      content:
-        message.id === userMessage.id && context?.question
-          ? `${context.question}\n${trimmedContent}`
-          : message.content,
+      content: message.rawContent ?? message.content,
     }));
 
     try {
@@ -272,6 +273,7 @@ export default function Home() {
         id: `assistant-${Date.now()}`,
         role: "assistant",
         content: parsedAssistant.content,
+        rawContent: assistantText,
         createdAt: new Date().toISOString(),
         quickReplies: parsedAssistant.quickReplies,
       };
@@ -285,6 +287,8 @@ export default function Home() {
         id: `assistant-error-${Date.now()}`,
         role: "assistant",
         content:
+          "I couldn't reach the assistant just now. Please check your connection and try again.",
+        rawContent:
           "I couldn't reach the assistant just now. Please check your connection and try again.",
         createdAt: new Date().toISOString(),
       };
@@ -348,7 +352,7 @@ export default function Home() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col bg-gradient-to-b from-purple-50 via-white to-white">
+    <div className="flex min-h-screen flex-col bg-[#0b3d6f]">
       <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-8 px-4 py-10 sm:px-6 lg:px-8">
         <PathwaySelector
           options={PATHWAY_OPTIONS}
@@ -356,7 +360,7 @@ export default function Home() {
           isBusy={isLoading}
           onSelect={handlePathwaySelect}
         />
-        <section className="flex flex-1 flex-col rounded-3xl bg-white shadow-sm ring-1 ring-neutral-200">
+        <section className="flex flex-1 flex-col rounded-3xl bg-[#0f4c81] shadow-lg ring-1 ring-[#174d8a]">
           <div className="flex-1 overflow-y-auto">
             <MessageList
               messages={messages}

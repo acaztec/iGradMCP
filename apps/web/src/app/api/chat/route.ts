@@ -55,7 +55,7 @@ type SkillConfidence = "confident" | "needs-support" | "unsure";
 
 type GedReadiness = "not-ready" | "somewhat-ready" | "refresher";
 
-type GedSubject = "math" | "reading" | "language-mechanics" | "writing";
+type GedSubject = "math" | "reading";
 
 type KnowledgeQuestionId =
   | "icd10-purpose"
@@ -120,10 +120,13 @@ const EXAM_TOPICS = [
 const KNOWLEDGE_ASSESSMENT_INTRO =
   "CBCS Knowledge Assessment – Use the practice quiz to pinpoint topics for review.";
 
-type KnowledgeQuestion = {
-  id: KnowledgeQuestionId;
+type MultipleChoiceQuestion = {
   prompt: string;
   options: string[];
+};
+
+type KnowledgeQuestion = MultipleChoiceQuestion & {
+  id: KnowledgeQuestionId;
   correctOptionIndex: number;
   supportLessons: string[];
 };
@@ -176,6 +179,34 @@ const KNOWLEDGE_QUESTIONS: KnowledgeQuestion[] = [
   },
 ];
 
+const KNOWLEDGE_OPTION_PATTERNS: Record<
+  KnowledgeQuestionId,
+  RegExp[][]
+> = {
+  "icd10-purpose": [
+    [/diseases?/, /(conditions?|symptoms?)/, /(external\s+causes?|abnormal\s+findings?)/],
+    [/hospital/, /inpatient/],
+    [/outpatient/],
+    [
+      /nonphysician/,
+      /(medicare\s+beneficiaries|privately\s+insured\s+enrollees|private\s+health\s+insurance)/,
+    ],
+  ],
+  "medial-meaning": [
+    [/(toward|to)\s+the\s+(middle|midline)/],
+    [/(away|farther)\s+from\s+the\s+(midline|middle)/],
+    [/\bbelow\b/],
+    [/\babove\b/],
+  ],
+  "hipaa-entities": [
+    [/health\s+plans?/],
+    [/clearinghouses?/],
+    [/providers?/],
+    [/all\s+of\s+the\s+above/],
+    [/none\s+of\s+the\s+above/],
+  ],
+};
+
 const CBCS_ASSESSMENT_INTRO = [
   "Got it. Thanks for helping me better understand your soft skills needs. To get certified, you will also need to pass a certification test, such as the National Healthcareer Association Certified Coding and Billing Specialist (CBCS) exam.",
   "The CBCS exam includes questions about the following topics: The Revenue Cycle and Regulatory Compliance, Insurance Eligibility and Other Payer Requirements, Coding and Coding Guidelines, and Billing and Reimbursement.",
@@ -196,27 +227,96 @@ function buildAssessmentIntroWithFirstQuestion(): string {
   return [CBCS_ASSESSMENT_INTRO, firstPrompt].join("\n\n");
 }
 
-const GED_MATH_ASSESSMENT_PROMPT = [
-  "I’ve pulled together some questions that will help focus your studies for math. Please answer the questions in this assessment.",
-  "Math Skills Assessment",
-  "Q1: Which of these fractions is in lowest terms?",
-  "A) 2/3",
-  "B) 2/6",
-  "C) 4/8",
-  "D) 5/15",
-  "",
-  "Q2: What is 72 ÷ 5?",
-  "A) 12",
-  "B) 13",
-  "C) 14 R2",
-  "D) 14 R4",
-  "",
-  "Q3: What is 4²?",
-  "A) 2",
-  "B) 8",
-  "C) 12",
-  "D) 16",
-].join("\n");
+type GedAssessmentQuestion = MultipleChoiceQuestion & {
+  id: string;
+};
+
+const GED_ASSESSMENT_ORDER: GedSubject[] = ["math", "reading"];
+
+const GED_SUBJECT_LABELS: Record<GedSubject, string> = {
+  math: "math",
+  reading: "reading",
+};
+
+const GED_ASSESSMENTS: Partial<
+  Record<
+    GedSubject,
+    {
+      introLines: string[];
+      questions: GedAssessmentQuestion[];
+    }
+  >
+> = {
+  math: {
+    introLines: [
+      "I’ve pulled together some questions that will help focus your studies for math. Please answer the questions in this assessment.",
+      "Math Skills Assessment",
+    ],
+    questions: [
+      {
+        id: "math-lowest-terms",
+        prompt: "Q1: Which of these fractions is in lowest terms?",
+        options: ["A) 2/3", "B) 2/6", "C) 4/8", "D) 5/15"],
+      },
+      {
+        id: "math-division",
+        prompt: "Q2: What is 72 ÷ 5?",
+        options: [
+          "A) 12",
+          "B) 13",
+          "C) 14 remainder 2",
+          "D) 14 remainder 4",
+        ],
+      },
+      {
+        id: "math-exponents",
+        prompt: "Q3: What is 4²?",
+        options: ["A) 2", "B) 8", "C) 12", "D) 16"],
+      },
+    ],
+  },
+  reading: {
+    introLines: [
+      "I’ve pulled together some questions that will help focus your studies for reading. Please answer the questions in this assessment.",
+      "Reading Skills Assessment",
+    ],
+    questions: [
+      {
+        id: "reading-text-type",
+        prompt:
+          "Q1: When a passage gives facts about a real person, place, or event, which type of text are you reading?",
+        options: [
+          "A) Informational text",
+          "B) Fiction narrative",
+          "C) Poetry",
+          "D) Opinion letter",
+        ],
+      },
+      {
+        id: "reading-context-clues",
+        prompt:
+          "Q2: If you need to find the meaning of an unfamiliar word in a passage, which strategy is most helpful?",
+        options: [
+          "A) Look at the words and sentences around it for context clues.",
+          "B) Skip the word and keep reading.",
+          "C) Replace it with any word that sounds similar.",
+          "D) Look only at the first letter.",
+        ],
+      },
+      {
+        id: "reading-main-idea",
+        prompt:
+          "Q3: After reading an article, what question helps you identify the main idea?",
+        options: [
+          "A) What is the author mostly trying to explain?",
+          "B) Which sentence uses the most complex vocabulary?",
+          "C) How many paragraphs are in the article?",
+          "D) Which paragraph is the longest?",
+        ],
+      },
+    ],
+  },
+};
 
 const GED_READINESS_PROMPT =
   "How would you rate your readiness to take a high-school equivalency (HSE) exam?\n• I’m not ready. I would need to start with basic academic skills and work my way up to intermediate skills and then high-school skills.\n• I’m somewhat ready. I would need to start with intermediate academic skills and work my way up to high-school level skills.\n• I’m ready, but I would like a refresher of high-school level academic skills.";
@@ -226,8 +326,6 @@ const GED_SUBJECTS_PROMPT = [
   "Select all that apply.",
   "• Math",
   "• Reading",
-  "• Language Mechanics",
-  "• Writing",
 ].join("\n");
 
 const CORE_CBCS_LESSONS = [
@@ -244,15 +342,44 @@ function buildKnowledgeQuestionPrompt(question: KnowledgeQuestion): string {
   return `${question.prompt}\n${optionLines}`;
 }
 
-function createKnowledgeAnswerParser(
-  question: KnowledgeQuestion
+function buildGedQuestionPrompt(question: GedAssessmentQuestion): string {
+  const optionLines = question.options.map((option) => `• ${option}`).join("\n");
+  return `${question.prompt}\n${optionLines}`;
+}
+
+function buildGedSubjectIntroWithFirstQuestion(subject: GedSubject): string | null {
+  const config = GED_ASSESSMENTS[subject];
+
+  if (!config || config.questions.length === 0) {
+    return null;
+  }
+
+  const [firstQuestion] = config.questions;
+
+  if (!firstQuestion) {
+    return null;
+  }
+
+  const introBlock = config.introLines.join("\n");
+  const firstPrompt = buildGedQuestionPrompt(firstQuestion);
+
+  if (introBlock.length === 0) {
+    return firstPrompt;
+  }
+
+  return `${introBlock}\n\n${firstPrompt}`;
+}
+
+function createMultipleChoiceAnswerParser(
+  options: string[],
+  optionPatterns?: RegExp[][]
 ): (content: string) => { answer: string; optionIndex: number } | null {
   return (content: string) => {
     const latestAnswer = extractLatestAnswer(content);
     const normalizedAnswer = normalizeText(latestAnswer);
 
-    for (let index = 0; index < question.options.length; index += 1) {
-      const option = question.options[index]!;
+    for (let index = 0; index < options.length; index += 1) {
+      const option = options[index]!;
       const normalizedOption = normalizeText(option);
 
       if (normalizedAnswer === normalizedOption) {
@@ -270,8 +397,33 @@ function createKnowledgeAnswerParser(
       }
     }
 
+    if (optionPatterns && optionPatterns.length > 0) {
+      const normalizedContent = normalizeText(content);
+
+      for (let index = 0; index < optionPatterns.length; index += 1) {
+        const patterns = optionPatterns[index] ?? [];
+
+        if (
+          patterns.length > 0 &&
+          patterns.every((pattern) => pattern.test(normalizedContent))
+        ) {
+          const option = options[index]!;
+          return { answer: option, optionIndex: index };
+        }
+      }
+    }
+
     return null;
   };
+}
+
+function createKnowledgeAnswerParser(
+  question: KnowledgeQuestion
+): (content: string) => { answer: string; optionIndex: number } | null {
+  return createMultipleChoiceAnswerParser(
+    question.options,
+    KNOWLEDGE_OPTION_PATTERNS[question.id]
+  );
 }
 
 const DIGITAL_EXCEL_LESSON =
@@ -308,22 +460,6 @@ const GED_SUBJECT_LESSONS: Record<
       "Drawing Conclusions in Reading",
     ],
   },
-  "language-mechanics": {
-    focus: "language mechanics",
-    lessons: [
-      "Capitalization and Punctuation",
-      "Common Writing Issues",
-      "Creating an Outline",
-    ],
-  },
-  writing: {
-    focus: "writing skills",
-    lessons: [
-      "Writing an Essay",
-      "Organization",
-      "Writing Logical Arguments",
-    ],
-  },
 };
 
 const PLAN_OPENING_LINE =
@@ -350,6 +486,7 @@ Final plan formatting rules:
 3. Under "Certification Prep Focus" list the four CBCS domains exactly as provided. Under "CBCS Knowledge Assessment" include the provided practice quiz line, but do not restate the individual assessment questions in the final plan.
 4. Use the supplied guidance notes verbatim whenever they are provided (for example, digital literacy lines, soft skill suggestions, and recommended lessons). You may adjust sentence flow for readability but do not alter the meaning.
 5. Maintain a supportive, professional voice that thanks the learner, summarizes their needs, and calls out next steps.
+6. Include a brief reflection on the learner's GED subject responses (when applicable) and CBCS quiz answers so the recommended lessons clearly connect to their demonstrated strengths and gaps.
 
 Always return valid Markdown in the final plan.`;
 
@@ -564,14 +701,6 @@ function parseGedSubjects(content: string): GedSubject[] | null {
     if (/reading/.test(normalized) || /literacy/.test(normalized)) {
       selections.add("reading");
     }
-
-    if (/language/.test(normalized) || /mechanics/.test(normalized) || /grammar/.test(normalized)) {
-      selections.add("language-mechanics");
-    }
-
-    if (/writing/.test(normalized) || /essays?/.test(normalized)) {
-      selections.add("writing");
-    }
   };
 
   if (segments.length === 0) {
@@ -610,27 +739,6 @@ function selectGedAcademicSupport(
   }
 
   return { lessons: Array.from(lessons), focusHint };
-}
-
-function buildGedAssessmentPrompt(subjects: GedSubject[]): string {
-  if (subjects.includes("math")) {
-    return GED_MATH_ASSESSMENT_PROMPT;
-  }
-
-  const subjectNames = subjects
-    .map((subject) => {
-      if (subject === "language-mechanics") {
-        return "language mechanics";
-      }
-
-      return subject;
-    })
-    .join(", ");
-
-  return [
-    `I’ve pulled together some reflection questions to support your ${subjectNames} practice.`,
-    "Let me know what feels most challenging so I can match specific lessons.",
-  ].join("\n");
 }
 
 function findAssistantMessageIndex(
@@ -1222,8 +1330,6 @@ async function getAssistantReply(messages: ChatMessage[]): Promise<string> {
         "Select all that apply.",
         "• Math",
         "• Reading",
-        "• Language Mechanics",
-        "• Writing",
       ].join("\n");
     }
   }
@@ -1322,19 +1428,66 @@ async function getAssistantReply(messages: ChatMessage[]): Promise<string> {
     );
   }
 
-  const knowledgeAnswers: KnowledgeAnswer[] = [];
+  let lastAnsweredUserIndex = teamworkResult.entry.index;
 
-  if (!hasDiploma && gedSubjects.length > 0 && gedSubjects.includes("math")) {
-    const assessmentPrompt = buildGedAssessmentPrompt(gedSubjects);
-    const assessmentIndex = findAssistantMessageIndex(messages, assessmentPrompt);
+  if (!hasDiploma && gedSubjects.length > 0) {
+    const assessmentSubjects = GED_ASSESSMENT_ORDER.filter(
+      (subject) =>
+        gedSubjects.includes(subject) &&
+        (GED_ASSESSMENTS[subject]?.questions.length ?? 0) > 0
+    );
 
-    if (
-      assessmentIndex === -1 ||
-      !hasUserReplyAfterIndex(messages, assessmentIndex)
-    ) {
-      return assessmentPrompt;
+    for (const subject of assessmentSubjects) {
+      const config = GED_ASSESSMENTS[subject];
+
+      if (!config) {
+        continue;
+      }
+
+      const introWithFirstQuestion =
+        buildGedSubjectIntroWithFirstQuestion(subject);
+      const subjectLabel = GED_SUBJECT_LABELS[subject] ?? subject;
+
+      for (let index = 0; index < config.questions.length; index += 1) {
+        const question = config.questions[index]!;
+        const prompt = buildGedQuestionPrompt(question);
+        const assistantIndex = findAssistantMessageIndex(messages, prompt);
+
+        if (assistantIndex === -1) {
+          if (index === 0 && introWithFirstQuestion) {
+            return introWithFirstQuestion;
+          }
+
+          return prompt;
+        }
+
+        if (!hasUserReplyAfterIndex(messages, assistantIndex)) {
+          return prompt;
+        }
+
+        const result = findParsedResponse(
+          userMessages,
+          lastAnsweredUserIndex,
+          createMultipleChoiceAnswerParser(question.options)
+        );
+
+        if (!result.entry) {
+          return prompt;
+        }
+
+        if (!result.value) {
+          return [
+            `Thanks for sticking with me! Please choose one of the answer choices so I can tailor your ${subjectLabel} study plan.`,
+            prompt,
+          ].join("\n");
+        }
+
+        lastAnsweredUserIndex = result.entry.index;
+      }
     }
   }
+
+  const knowledgeAnswers: KnowledgeAnswer[] = [];
 
   const introIndex = findAssistantMessageIndex(
     messages,
@@ -1345,7 +1498,7 @@ async function getAssistantReply(messages: ChatMessage[]): Promise<string> {
     return buildAssessmentIntroWithFirstQuestion();
   }
 
-  let lastUserIndex = teamworkResult.entry.index;
+  let lastUserIndex = lastAnsweredUserIndex;
 
   for (const question of KNOWLEDGE_QUESTIONS) {
     const prompt = buildKnowledgeQuestionPrompt(question);

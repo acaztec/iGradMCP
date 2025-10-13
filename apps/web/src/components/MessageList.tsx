@@ -50,7 +50,7 @@ export default function MessageList({
   }, [messages]);
 
   return (
-    <div className="space-y-6 px-4 py-6">
+    <div className="space-y-6 px-4 py-6 text-white">
       {renderMessages.map((message) => (
         <div
           key={message.id}
@@ -59,50 +59,50 @@ export default function MessageList({
           <div
             className={`max-w-3xl rounded-lg px-4 py-3 ${
               message.role === "user"
-                ? "bg-neutral-900 text-white"
-                : "border border-neutral-200 bg-white text-neutral-900"
+                ? "bg-[#f47b20] text-white shadow-md"
+                : "border border-[#dbe5f5] bg-white text-[#0b3d6f] shadow"
             }`}
           >
             {message.role === "assistant" && "markdownContent" in message ? (
-              <div className="space-y-3 text-neutral-900">
+              <div className="space-y-3 text-[#0b3d6f]">
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
                   components={{
                     h1: ({ children }) => (
-                      <h1 className="text-xl font-semibold text-purple-900">
+                      <h1 className="text-xl font-semibold text-[#0b3d6f]">
                         {children}
                       </h1>
                     ),
                     h2: ({ children }) => (
-                      <h2 className="text-lg font-semibold text-purple-900">
+                      <h2 className="text-lg font-semibold text-[#0b3d6f]">
                         {children}
                       </h2>
                     ),
                     h3: ({ children }) => (
-                      <h3 className="text-base font-semibold text-purple-900">
+                      <h3 className="text-base font-semibold text-[#0b3d6f]">
                         {children}
                       </h3>
                     ),
                     h4: ({ children }) => (
-                      <h4 className="text-sm font-semibold text-purple-900">
+                      <h4 className="text-sm font-semibold text-[#0b3d6f]">
                         {children}
                       </h4>
                     ),
                     p: ({ children }) => (
-                      <p className="whitespace-pre-wrap text-sm leading-relaxed text-neutral-900">
+                      <p className="whitespace-pre-wrap text-sm leading-relaxed text-[#0b3d6f]">
                         {children}
                       </p>
                     ),
                     strong: ({ children }) => (
-                      <strong className="font-semibold text-neutral-900">
+                      <strong className="font-semibold text-[#0b3d6f]">
                         {children}
                       </strong>
                     ),
                     em: ({ children }) => (
-                      <em className="text-neutral-900">{children}</em>
+                      <em className="text-[#0b3d6f]">{children}</em>
                     ),
                     li: ({ children }) => (
-                      <li className="text-sm leading-relaxed text-neutral-900">
+                      <li className="text-sm leading-relaxed text-[#0b3d6f]">
                         {children}
                       </li>
                     ),
@@ -119,12 +119,12 @@ export default function MessageList({
                         href={href}
                         target="_blank"
                         rel="noreferrer"
-                        className="text-sm font-medium text-purple-700 underline"
+                        className="text-sm font-semibold text-[#0b3d6f] underline decoration-[#f47b20] decoration-2"
                       >
                         {children}
                       </a>
                     ),
-                    hr: () => <hr className="border-neutral-200" />,
+                    hr: () => <hr className="border-[#dbe5f5]" />,
                   }}
                 >
                   {message.markdownContent}
@@ -155,12 +155,12 @@ export default function MessageList({
                             key={option}
                             className={`flex items-center gap-3 rounded-xl border px-3 py-2 text-sm font-medium transition ${
                               isSelected
-                                ? "border-purple-400 bg-purple-50 text-purple-900"
-                                : "border-purple-100 bg-white text-neutral-900"
+                                ? "border-[#f47b20] bg-[#f47b20] text-white shadow"
+                                : "border-[#1d5ca2] bg-[#123f70] text-white"
                             } ${
                               !isActiveQuickReply || isBusy
                                 ? "opacity-60"
-                                : "hover:border-purple-300 hover:bg-purple-50"
+                                : "hover:border-[#f47b20] hover:bg-[#1a66af]"
                             }`}
                           >
                             <input
@@ -173,7 +173,7 @@ export default function MessageList({
                                 )
                               }
                               disabled={!isActiveQuickReply || isBusy}
-                              className="h-4 w-4 rounded border-purple-300 text-purple-600 focus:ring-purple-500"
+                              className="h-4 w-4 rounded border-white bg-white text-[#f47b20] focus:ring-[#f47b20]"
                             />
                             <span>{option}</span>
                           </label>
@@ -184,7 +184,7 @@ export default function MessageList({
                         onClick={() =>
                           onQuickReplySubmit?.(message.quickReplies!.question)
                         }
-                        className="w-full rounded-full bg-purple-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-purple-700 focus-ring disabled:cursor-not-allowed disabled:opacity-60"
+                        className="w-full rounded-full bg-[#f47b20] px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-[#d96a18] focus-ring disabled:cursor-not-allowed disabled:opacity-60"
                         disabled={
                           !activeQuickReplyQuestion ||
                           activeQuickReplyQuestion !==
@@ -197,12 +197,12 @@ export default function MessageList({
                       </button>
                     </div>
                   ) : (
-                    <div className="flex flex-wrap gap-2">
+                    <div className="space-y-1">
                       {message.quickReplies.options.map((option) => (
                         <button
                           key={option}
                           type="button"
-                          className="rounded-full border border-purple-200 bg-purple-50 px-4 py-1 text-sm font-medium text-purple-800 transition hover:bg-purple-100 disabled:cursor-not-allowed disabled:opacity-60"
+                          className="group flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-sm font-semibold text-[#f47b20] transition hover:bg-[#fff4eb] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f47b20] disabled:cursor-not-allowed disabled:opacity-60"
                           onClick={() =>
                             onQuickReplySelect?.(
                               option,
@@ -211,7 +211,13 @@ export default function MessageList({
                           }
                           disabled={isBusy}
                         >
-                          {option}
+                          <span className="flex-1">{option}</span>
+                          <span
+                            aria-hidden
+                            className="text-base transition-transform group-hover:translate-x-0.5"
+                          >
+                            →
+                          </span>
                         </button>
                       ))}
                     </div>
@@ -219,7 +225,7 @@ export default function MessageList({
                 </div>
               )}
             {message.role === "assistant" && (
-              <div className="mt-2 text-xs text-neutral-500">
+              <div className="mt-2 text-xs text-[#dbe5f5]">
                 {new Date(message.createdAt || Date.now()).toLocaleTimeString(
                   [],
                   {
@@ -234,9 +240,9 @@ export default function MessageList({
       ))}
       {isBusy && (
         <div className="flex justify-start">
-          <div className="max-w-3xl rounded-lg border border-neutral-200 bg-white px-4 py-3 text-sm text-neutral-600">
+          <div className="max-w-3xl rounded-lg border border-[#1d5ca2] bg-[#123f70] px-4 py-3 text-sm text-white">
             <div className="flex items-center gap-2">
-              <span className="inline-flex h-2.5 w-2.5 animate-pulse rounded-full bg-purple-500" />
+              <span className="inline-flex h-2.5 w-2.5 animate-pulse rounded-full bg-[#f47b20]" />
               Aztec IET is thinking…
             </div>
           </div>
