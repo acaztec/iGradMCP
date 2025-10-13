@@ -197,12 +197,12 @@ export default function MessageList({
                       </button>
                     </div>
                   ) : (
-                    <div className="flex flex-wrap gap-2">
+                    <div className="space-y-1">
                       {message.quickReplies.options.map((option) => (
                         <button
                           key={option}
                           type="button"
-                          className="rounded-full border border-transparent bg-[#f47b20] px-4 py-1 text-sm font-semibold text-white shadow transition hover:bg-[#d96a18] disabled:cursor-not-allowed disabled:opacity-60"
+                          className="group flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-sm font-semibold text-[#f47b20] transition hover:bg-[#fff4eb] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f47b20] disabled:cursor-not-allowed disabled:opacity-60"
                           onClick={() =>
                             onQuickReplySelect?.(
                               option,
@@ -211,7 +211,13 @@ export default function MessageList({
                           }
                           disabled={isBusy}
                         >
-                          {option}
+                          <span className="flex-1">{option}</span>
+                          <span
+                            aria-hidden
+                            className="text-base transition-transform group-hover:translate-x-0.5"
+                          >
+                            →
+                          </span>
                         </button>
                       ))}
                     </div>
