@@ -176,6 +176,34 @@ const KNOWLEDGE_QUESTIONS: KnowledgeQuestion[] = [
   },
 ];
 
+const KNOWLEDGE_OPTION_PATTERNS: Record<
+  KnowledgeQuestionId,
+  RegExp[][]
+> = {
+  "icd10-purpose": [
+    [/diseases?/, /(conditions?|symptoms?)/, /(external\s+causes?|abnormal\s+findings?)/],
+    [/hospital/, /inpatient/],
+    [/outpatient/],
+    [
+      /nonphysician/,
+      /(medicare\s+beneficiaries|privately\s+insured\s+enrollees|private\s+health\s+insurance)/,
+    ],
+  ],
+  "medial-meaning": [
+    [/(toward|to)\s+the\s+(middle|midline)/],
+    [/(away|farther)\s+from\s+the\s+(midline|middle)/],
+    [/\bbelow\b/],
+    [/\babove\b/],
+  ],
+  "hipaa-entities": [
+    [/health\s+plans?/],
+    [/clearinghouses?/],
+    [/providers?/],
+    [/all\s+of\s+the\s+above/],
+    [/none\s+of\s+the\s+above/],
+  ],
+};
+
 const CBCS_ASSESSMENT_INTRO = [
   "Got it. Thanks for helping me better understand your soft skills needs. To get certified, you will also need to pass a certification test, such as the National Healthcareer Association Certified Coding and Billing Specialist (CBCS) exam.",
   "The CBCS exam includes questions about the following topics: The Revenue Cycle and Regulatory Compliance, Insurance Eligibility and Other Payer Requirements, Coding and Coding Guidelines, and Billing and Reimbursement.",
@@ -267,6 +295,23 @@ function createKnowledgeAnswerParser(
 
       if (normalizedAnswer.startsWith(`${optionLetter})`)) {
         return { answer: option, optionIndex: index };
+      }
+    }
+
+    const normalizedContent = normalizeText(content);
+    const patternsForQuestion = KNOWLEDGE_OPTION_PATTERNS[question.id];
+
+    if (patternsForQuestion) {
+      for (let index = 0; index < patternsForQuestion.length; index += 1) {
+        const patterns = patternsForQuestion[index] ?? [];
+
+        if (
+          patterns.length > 0 &&
+          patterns.every((pattern) => pattern.test(normalizedContent))
+        ) {
+          const option = question.options[index]!;
+          return { answer: option, optionIndex: index };
+        }
       }
     }
 

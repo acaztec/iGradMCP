@@ -352,7 +352,7 @@ export default function Home() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col bg-gradient-to-b from-sky-50 via-white to-white">
+    <div className="flex min-h-screen flex-col bg-[#0b3d6f]">
       <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-8 px-4 py-10 sm:px-6 lg:px-8">
         <PathwaySelector
           options={PATHWAY_OPTIONS}
@@ -360,7 +360,7 @@ export default function Home() {
           isBusy={isLoading}
           onSelect={handlePathwaySelect}
         />
-        <section className="flex flex-1 flex-col rounded-3xl bg-white shadow-sm ring-1 ring-neutral-200">
+        <section className="flex flex-1 flex-col rounded-3xl bg-[#0f4c81] shadow-lg ring-1 ring-[#174d8a]">
           <div className="flex-1 overflow-y-auto">
             <MessageList
               messages={messages}

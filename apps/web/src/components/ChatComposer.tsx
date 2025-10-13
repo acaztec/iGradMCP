@@ -58,7 +58,7 @@ export default function ChatComposer({
   };
 
   return (
-    <div className="sticky bottom-0 border-t border-neutral-200 bg-white">
+    <div className="sticky bottom-0 border-t border-[#174d8a] bg-[#0f4c81]">
       <div className="mx-auto max-w-4xl px-4 py-4">
         <form
           ref={formRef}
@@ -72,7 +72,7 @@ export default function ChatComposer({
             onKeyDown={handleKeyDown}
             placeholder="Share your answer or ask for more guidance..."
             rows={1}
-            className="flex-1 resize-none rounded-2xl border border-blue-200 bg-white px-4 py-3 text-sm text-neutral-900 placeholder-neutral-400 focus-ring"
+            className="flex-1 resize-none rounded-2xl border border-[#1d5ca2] bg-white px-4 py-3 text-sm text-[#0b3d6f] placeholder-[#5f7fa6] focus-ring"
             style={{ maxHeight: "200px" }}
             disabled={isLoading}
             name="input"
@@ -80,7 +80,7 @@ export default function ChatComposer({
           <button
             type="submit"
             disabled={!input.trim() || isLoading}
-            className="rounded-2xl bg-orange-500 px-6 py-3 text-sm font-medium text-white shadow-sm transition hover:bg-orange-600 focus-ring disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-2xl bg-[#f47b20] px-6 py-3 text-sm font-semibold text-white shadow-md transition hover:bg-[#d96a18] focus-ring disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isLoading ? "Sending..." : "Send"}
           </button>
