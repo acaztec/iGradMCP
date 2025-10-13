@@ -1514,7 +1514,7 @@ async function getAssistantReply(messages: ChatMessage[]): Promise<string> {
   if (hasDiploma === null) {
     const reminder = buildGoalLead(
       careerGoal,
-      `Can you pick the option that matches your high-school diploma or equivalency status? It's a key step toward "%goal%".`,
+      `Great! Each step brings you closer to %goal%. Can you pick the option that matches your high-school diploma or equivalency status?`,
       "Could you pick the option that best matches your high-school diploma or high-school equivalency status?"
     );
 
