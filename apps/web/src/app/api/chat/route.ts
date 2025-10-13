@@ -137,7 +137,7 @@ const KNOWLEDGE_QUESTIONS: KnowledgeQuestion[] = [
       "For reporting diseases and conditions, signs and symptoms, external causes of injuries, and abnormal findings",
       "For classifying and coding hospital inpatient procedures",
       "For reporting outpatient procedures and services healthcare providers perform",
-      "For reporting nonphysician supplies, procedures, products, and services for Medicare beneficiaries or privately insured enrollees",
+      "For reporting nonphysician supplies, procedures, products, and services provided to Medicare beneficiaries or individuals enrolled in private health insurance programs",
     ],
     correctOptionIndex: 0,
     supportLessons: ["Medical Coding Sets"],

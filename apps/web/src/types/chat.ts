@@ -4,6 +4,7 @@ export interface ChatMessage {
   id: string;
   role: ChatMessageRole;
   content: string;
+  rawContent?: string;
   createdAt: string;
   quickReplies?: {
     question: string;

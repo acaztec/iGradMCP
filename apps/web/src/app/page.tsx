@@ -226,10 +226,14 @@ export default function Home() {
     }
 
     const timestamp = new Date().toISOString();
+    const rawContent = context?.question
+      ? `${context.question}\n${trimmedContent}`
+      : trimmedContent;
     const userMessage: ChatMessage = {
       id: `user-${timestamp}`,
       role: "user",
       content: trimmedContent,
+      rawContent,
       createdAt: timestamp,
     };
 
@@ -242,10 +246,7 @@ export default function Home() {
 
     const requestMessages = conversationForRequest.map((message) => ({
       role: message.role,
-      content:
-        message.id === userMessage.id && context?.question
-          ? `${context.question}\n${trimmedContent}`
-          : message.content,
+      content: message.rawContent ?? message.content,
     }));
 
     try {
@@ -272,6 +273,7 @@ export default function Home() {
         id: `assistant-${Date.now()}`,
         role: "assistant",
         content: parsedAssistant.content,
+        rawContent: assistantText,
         createdAt: new Date().toISOString(),
         quickReplies: parsedAssistant.quickReplies,
       };
@@ -285,6 +287,8 @@ export default function Home() {
         id: `assistant-error-${Date.now()}`,
         role: "assistant",
         content:
+          "I couldn't reach the assistant just now. Please check your connection and try again.",
+        rawContent:
           "I couldn't reach the assistant just now. Please check your connection and try again.",
         createdAt: new Date().toISOString(),
       };
