@@ -501,6 +501,7 @@ Final plan formatting rules:
 3. Under "Certification Prep Focus" list the four CBCS domains exactly as provided. Under "CBCS Knowledge Assessment" include the provided practice quiz line, but do not restate the individual assessment questions in the final plan.
 4. Use the supplied guidance notes verbatim whenever they are provided (for example, digital literacy lines, soft skill suggestions, and recommended lessons). You may adjust sentence flow for readability but do not alter the meaning.
 5. Maintain a supportive, professional voice that thanks the learner, summarizes their needs, and calls out next steps.
+6. Include a brief reflection on the learner's GED subject responses (when applicable) and CBCS quiz answers so the recommended lessons clearly connect to their demonstrated strengths and gaps.
 
 Always return valid Markdown in the final plan.`;
 
