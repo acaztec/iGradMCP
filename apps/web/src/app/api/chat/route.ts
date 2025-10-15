@@ -644,12 +644,35 @@ function buildGoalLead(goal: string | null, template: string, fallback: string):
   return goal ? template : fallback;
 }
 
+function formatGoalForClosing(goal: string): string {
+  const trimmed = goal.trim();
+
+  if (!trimmed) {
+    return "";
+  }
+
+  const withoutOuterQuotes = trimmed.replace(/^"+|"+$/g, "");
+  const normalized = withoutOuterQuotes.replace(/^'+|'+$/g, "");
+
+  if (/^i\s+w(?:ant|ould\s+like)\s+to\s+/i.test(normalized)) {
+    return normalized.replace(/^i\s+w(?:ant|ould\s+like)\s+to\s+/i, "");
+  }
+
+  return normalized;
+}
+
 function buildGoalClosing(goal: string | null): string {
-  return buildGoalLead(
-    goal,
-    "Keep taking steps toward your CBCS goal—you've got this!",
-    "Keep taking steps toward your CBCS goal—you've got this!"
-  );
+  if (!goal) {
+    return "Keep taking steps toward your CBCS goal—you've got this!";
+  }
+
+  const closingGoal = formatGoalForClosing(goal);
+
+  if (!closingGoal) {
+    return "Keep taking steps toward your CBCS goal—you've got this!";
+  }
+
+  return `Keep taking steps toward your goal—${closingGoal}—you've got this!`;
 }
 
 function extractJsonObject<T>(content: string): T {
@@ -1578,27 +1601,20 @@ async function getAssistantReply(messages: ChatMessage[]): Promise<string> {
   );
 
   if (!spreadsheetResult.entry) {
-    const celebration = hasDiploma
+    const questionLead = hasDiploma
       ? buildGoalLead(
           careerGoal,
-          "Great! Having a high-school diploma or high-school equivalency meets one of the CBCS requirements—that keeps your CBCS goal within reach.",
-          "Great! Having a high-school diploma or high-school equivalency meets one of the CBCS requirements."
+          "Great! Having a high-school diploma or high-school equivalency meets one of the CBCS requirements—that keeps your CBCS goal within reach. How comfortable are you working with spreadsheets right now to support your CBCS goal?",
+          "Great! Having a high-school diploma or high-school equivalency meets one of the CBCS requirements. How comfortable are you working with spreadsheets?"
         )
       : buildGoalLead(
           careerGoal,
-          "Thanks for letting me know. We can plan for your high-school equivalency while you build coding skills so your CBCS goal stays on track.",
-          "Thanks for letting me know. We can plan for your high-school equivalency while you build coding skills."
+          "Thanks for letting me know. We can plan for your high-school equivalency while you build coding skills so your CBCS goal stays on track. How comfortable are you working with spreadsheets right now to support your CBCS goal?",
+          "Thanks for letting me know. We can plan for your high-school equivalency while you build coding skills. How comfortable are you working with spreadsheets?"
         );
 
-    const questionLine = buildGoalLead(
-      careerGoal,
-      "How comfortable are you working with spreadsheets right now to support your CBCS goal?",
-      "How comfortable are you working with spreadsheets?"
-    );
-
     return [
-      celebration,
-      questionLine,
+      questionLead,
       "• Very comfortable—I use spreadsheets frequently and consider myself an expert.",
       "• Somewhat comfortable—I occasionally use spreadsheets and know the basics.",
       "• Not comfortable—I rarely use or have never used spreadsheets.",
@@ -1611,8 +1627,8 @@ async function getAssistantReply(messages: ChatMessage[]): Promise<string> {
   if (!spreadsheetComfort) {
     const reminder = buildGoalLead(
       careerGoal,
-      "Give me a quick read on your spreadsheet comfort so we can map training that supports your CBCS goal.",
-      "Give me a quick read on your spreadsheet comfort so we can map training that supports your CBCS plan."
+      "Give me a quick read on your spreadsheet comfort so we can map training that supports your CBCS goal. Which option fits best?",
+      "Give me a quick read on your spreadsheet comfort so we can map training that supports your CBCS plan. Which option fits best?"
     );
 
     return [
