@@ -636,7 +636,7 @@ function buildSystemPrompt(goal: string | null): string {
   return [
     BASE_SYSTEM_PROMPT,
     "",
-    `Learner context: The learner shared this CBCS career destination—"${formatted}". Mention this context once near the end of your response to reinforce their goal, and avoid repeating it elsewhere.`,
+    `Learner context: The learner shared this CBCS career destination—"${formatted}". Do not mention this goal until your closing guidance. In your final paragraph, naturally encourage them that the recommended steps support what they shared: ${formatted}. Avoid repeating the goal elsewhere.`,
   ].join("\n");
 }
 
@@ -1513,8 +1513,8 @@ async function getAssistantReply(messages: ChatMessage[]): Promise<string> {
     return [
       lead,
       "Do you have a high-school diploma or high-school equivalency?",
-      "• Yes",
-      "• No",
+      "• Yes—I have a high-school diploma or equivalency.",
+      "• No—I still need to earn my high-school diploma or equivalency.",
     ].join("\n");
   }
 
@@ -1527,7 +1527,11 @@ async function getAssistantReply(messages: ChatMessage[]): Promise<string> {
       "Great! Each step brings you closer to your CBCS goal. Can you pick the option that matches your high-school diploma or equivalency status?"
     );
 
-    return [reminder, "• Yes", "• No"].join("\n");
+    return [
+      reminder,
+      "• Yes—I have a high-school diploma or equivalency.",
+      "• No—I still need to earn my high-school diploma or equivalency.",
+    ].join("\n");
   }
 
   let gedReadinessResult: ParsedResponse<GedReadiness> | null = null;
