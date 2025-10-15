@@ -636,7 +636,7 @@ function buildSystemPrompt(goal: string | null): string {
   return [
     BASE_SYSTEM_PROMPT,
     "",
-    `Learner context: The learner shared this CBCS career destination—"${formatted}". Do not mention this goal until your closing guidance. In your final paragraph, naturally encourage them that the recommended steps support what they shared: ${formatted}. Avoid repeating the goal elsewhere.`,
+    `Learner context: The learner shared this CBCS career destination—"${formatted}". Do not mention this goal until your closing guidance. In your final paragraph, restate the goal and explain how the recommended steps move them toward ${formatted}, mentioning the employer or role details they provided. Avoid repeating the goal elsewhere.`,
   ].join("\n");
 }
 
@@ -1461,10 +1461,22 @@ async function generateCbcsPlan(
   try {
     const systemPrompt = buildSystemPrompt(inputs.careerGoal);
 
-    return await callOpenAi([
+    const aiPlan = await callOpenAi([
       { role: "system", content: systemPrompt },
       { role: "user", content: userPrompt },
     ]);
+
+    const trimmedPlan = aiPlan.trim();
+
+    if (trimmedPlan.includes(closingLine)) {
+      return trimmedPlan;
+    }
+
+    if (trimmedPlan.length === 0) {
+      return closingLine;
+    }
+
+    return `${trimmedPlan}\n\n${closingLine}`;
   } catch (error) {
     console.error("Failed to generate AI guidance:", error);
     return buildStaticPlan(inputs);
