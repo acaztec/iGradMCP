@@ -636,7 +636,7 @@ function buildSystemPrompt(goal: string | null): string {
   return [
     BASE_SYSTEM_PROMPT,
     "",
-    `Learner context: The learner shared this CBCS career destination—"${formatted}". Do not mention this goal until your closing guidance. In your final paragraph, restate the goal and explain how the recommended steps move them toward ${formatted}, mentioning the employer or role details they provided. Avoid repeating the goal elsewhere.`,
+    `Learner context: The learner shared this CBCS career destination—"${formatted}". Hold this context until your closing paragraph. In that closing, write one to two sentences that weave in the learner's goal using fresh wording—summarize or expand on their intent instead of copying it verbatim. Connect the plan to how it supports success with ${formatted}, highlighting the employer or role details they provided. Avoid repeating the goal elsewhere.`,
   ].join("\n");
 }
 
@@ -661,18 +661,187 @@ function formatGoalForClosing(goal: string): string {
   return normalized;
 }
 
-function buildGoalClosing(goal: string | null): string {
+type GoalDetails = {
+  main: string;
+  organization: string | null;
+  role: string | null;
+};
+
+function extractGoalDetails(goal: string | null): GoalDetails {
+  const fallback: GoalDetails = { main: "", organization: null, role: null };
+
   if (!goal) {
-    return "Keep taking steps toward your CBCS goal—you've got this!";
+    return fallback;
   }
 
-  const closingGoal = formatGoalForClosing(goal);
+  const formatted = formatGoalForClosing(goal);
 
-  if (!closingGoal) {
-    return "Keep taking steps toward your CBCS goal—you've got this!";
+  if (!formatted) {
+    return fallback;
   }
 
-  return `Keep taking steps toward your goal—${closingGoal}—you've got this!`;
+  const sanitized = formatted.replace(/["“”]+/g, "").trim();
+  const [primary] =
+    sanitized.split(
+      /\b(?:because|since|so that|so i can|so i could|so i might|so i|so)\b/i
+    ) ?? [];
+  const main = (primary ?? sanitized).trim();
+
+  const organizationMatch =
+    main.match(
+      /(?:work|contribute|join) (?:at|for|with)\s+([^.,;]+?)(?=\s+(?:as\s+an?\b|as\s+a\b|in\b|on\b|$))/i
+    ) ?? null;
+
+  const roleMatch =
+    main.match(
+      /as an?\s+([^.,;]+?)(?=$|\s+(?:at|for|with|because|since|so\b|to\b))/i
+    ) ??
+    main.match(
+      /become\s+an?\s+([^.,;]+?)(?=$|\s+(?:at|for|with|because|since|so\b|to\b))/i
+    ) ??
+    main.match(
+      /be\s+an?\s+([^.,;]+?)(?=$|\s+(?:at|for|with|because|since|so\b|to\b))/i
+    ) ??
+    null;
+
+  const cleanFragment = (value: string | null) => {
+    if (!value) {
+      return null;
+    }
+
+    const cleaned = value.replace(/["“”]+/g, "").replace(/\s+/g, " ").trim();
+
+    if (!cleaned) {
+      return null;
+    }
+
+    return cleaned.replace(/\b(?:role|position)\.?$/i, "").trim();
+  };
+
+  const organization = cleanFragment(organizationMatch?.[1] ?? null);
+  const role = cleanFragment(roleMatch?.[1] ?? null);
+  const mainGoal = cleanFragment(main) ?? "";
+
+  return { main: mainGoal, organization, role };
+}
+
+function buildGoalClosingParagraph(
+  goal: string | null,
+  blueprint?: PlanBlueprint
+): string {
+  const fallback = "Keep taking steps toward your CBCS goal—you've got this!";
+
+  if (!goal) {
+    return fallback;
+  }
+
+  const details = extractGoalDetails(goal);
+
+  if (!details.main) {
+    return fallback;
+  }
+
+  const focusSummary =
+    "coding accuracy, compliance awareness, and reimbursement readiness";
+  const firstLesson =
+    blueprint?.recommendedLessonLines
+      .map((group) => {
+        const match = group.match(/Lesson:\s*([^\n]+)/);
+        return match?.[1]?.trim() ?? null;
+      })
+      .find((lesson): lesson is string => Boolean(lesson)) ?? null;
+
+  if (details.organization && details.role) {
+    const sentence = firstLesson
+      ? `Working through ${firstLesson} and the rest of this plan will strengthen the ${focusSummary} that ${details.organization} expects from someone in the ${details.role} role.`
+      : `These lessons will strengthen the ${focusSummary} that ${details.organization} expects from someone in the ${details.role} role.`;
+
+    return [
+      sentence,
+      `Stay consistent and you'll be ready to make an impact with ${details.organization}.`,
+    ].join(" ");
+  }
+
+  if (details.organization) {
+    const sentence = firstLesson
+      ? `Start with ${firstLesson} to build the ${focusSummary} that teams at ${details.organization} rely on every day.`
+      : `These lessons will strengthen the ${focusSummary} that teams at ${details.organization} rely on every day.`;
+
+    return [
+      sentence,
+      `Keep moving forward and you'll be ready to contribute at ${details.organization} with confidence.`,
+    ].join(" ");
+  }
+
+  const isGenericRole = (roleValue: string | null) => {
+    if (!roleValue) {
+      return false;
+    }
+
+    const normalized = roleValue.toLowerCase();
+    return (
+      normalized === "cbcs" ||
+      normalized === "certified billing and coding specialist"
+    );
+  };
+
+  if (details.role && !isGenericRole(details.role)) {
+    const sentence = firstLesson
+      ? `Start with ${firstLesson} to deepen the ${focusSummary} you'll rely on in the ${details.role} role.`
+      : `These lessons are designed to build the ${focusSummary} you'll rely on in the ${details.role} role.`;
+
+    return [
+      sentence,
+      `Stay focused and you'll be ready to shine when you step into the ${details.role} role.`,
+    ].join(" ");
+  }
+
+  const sentence = firstLesson
+    ? `Start with ${firstLesson}—these recommendations keep you moving toward your plan to ${details.main}.`
+    : `These recommendations keep you moving toward your plan to ${details.main}.`;
+
+  return [
+    sentence,
+    "Stay consistent—you're building the skills to make it happen.",
+  ].join(" ");
+}
+
+function planIncludesGoalReference(plan: string, goal: string | null): boolean {
+  if (!goal) {
+    return true;
+  }
+
+  const normalizedPlan = plan.toLowerCase();
+  const details = extractGoalDetails(goal);
+
+  const fragments: string[] = [];
+
+  if (details.organization) {
+    fragments.push(details.organization.toLowerCase());
+  }
+
+  if (details.role) {
+    const normalizedRole = details.role.toLowerCase();
+
+    if (
+      normalizedRole !== "cbcs" &&
+      normalizedRole !== "certified billing and coding specialist"
+    ) {
+      fragments.push(normalizedRole);
+    }
+  }
+
+  if (fragments.length === 0 && details.main) {
+    fragments.push(details.main.toLowerCase());
+  }
+
+  return fragments.some((fragment) => {
+    if (!fragment) {
+      return false;
+    }
+
+    return normalizedPlan.includes(fragment);
+  });
 }
 
 function extractJsonObject<T>(content: string): T {
@@ -1237,7 +1406,10 @@ function buildPlanBlueprint(inputs: PlanInputs): PlanBlueprint {
 
 function buildStaticPlan(inputs: PlanInputs): string {
   const blueprint = buildPlanBlueprint(inputs);
-  const closingLine = buildGoalClosing(inputs.careerGoal);
+  const closingParagraph = buildGoalClosingParagraph(
+    inputs.careerGoal,
+    blueprint
+  );
 
   const softSkillContent = blueprint.softSkillLines.join("\n");
   const certificationContent = [
@@ -1255,7 +1427,7 @@ function buildStaticPlan(inputs: PlanInputs): string {
     `### Certification Prep Focus\n${certificationContent}`,
     `### CBCS Knowledge Assessment\n${blueprint.knowledgeAssessmentLine}`,
     `### Recommended Lessons\n${recommendedLessonContent}`,
-    closingLine,
+    closingParagraph,
   ].join("\n\n");
 }
 
@@ -1302,7 +1474,10 @@ async function generateCbcsPlan(
 ): Promise<string> {
   const blueprint = buildPlanBlueprint(inputs);
   const { answers } = inputs;
-  const closingLine = buildGoalClosing(inputs.careerGoal);
+  const closingParagraph = buildGoalClosingParagraph(
+    inputs.careerGoal,
+    blueprint
+  );
   const lessonCatalog = formatLessonCatalog();
 
   const answerSummaryLines: string[] = [];
@@ -1439,7 +1614,6 @@ async function generateCbcsPlan(
     ].join("\n")}`,
     `CBCS knowledge assessment bullet:\n${blueprint.knowledgeAssessmentLine}`,
     `Recommended lessons:\n${blueprint.recommendedLessonLines.join("\n")}`,
-    `Closing encouragement line:\n${closingLine}`,
   ].join("\n\n");
 
   const userPrompt = [
@@ -1468,15 +1642,31 @@ async function generateCbcsPlan(
 
     const trimmedPlan = aiPlan.trim();
 
-    if (trimmedPlan.includes(closingLine)) {
-      return trimmedPlan;
+    if (!inputs.careerGoal && trimmedPlan.length === 0) {
+      return closingParagraph;
     }
 
-    if (trimmedPlan.length === 0) {
-      return closingLine;
+    if (!planIncludesGoalReference(trimmedPlan, inputs.careerGoal)) {
+      const fallbackClosing = closingParagraph.trim();
+
+      if (!fallbackClosing) {
+        return trimmedPlan;
+      }
+
+      if (
+        trimmedPlan.toLowerCase().includes(fallbackClosing.toLowerCase())
+      ) {
+        return trimmedPlan;
+      }
+
+      if (trimmedPlan.length === 0) {
+        return fallbackClosing;
+      }
+
+      return `${trimmedPlan}\n\n${closingParagraph}`;
     }
 
-    return `${trimmedPlan}\n\n${closingLine}`;
+    return trimmedPlan;
   } catch (error) {
     console.error("Failed to generate AI guidance:", error);
     return buildStaticPlan(inputs);
